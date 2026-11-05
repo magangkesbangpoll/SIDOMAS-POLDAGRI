@@ -1,0 +1,28 @@
+# Konfigurasi Fly.io. Jika nama aplikasi di bawah sudah dipakai orang lain, ganti dengan nama lain yang unik.
+app = 'sidomas-poldagri'
+primary_region = 'sin'
+
+[build]
+
+[env]
+  PORT = '8080'
+  DATA_DIR = '/data'
+  COOKIE_SECURE = 'true'
+  TRUST_PROXY = '1'
+
+# Disk permanen untuk database SQLite. Cukup SATU mesin (database SQLite tidak untuk dibagi ke beberapa mesin).
+[mounts]
+  source = 'sidomas_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
