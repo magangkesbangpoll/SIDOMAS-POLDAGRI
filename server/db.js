@@ -19,6 +19,17 @@ db.pragma('foreign_keys = ON');
 
 export const PERMS = ['view_ormas', 'manage_ormas', 'view_docs', 'view_credentials', 'manage_credentials', 'export', 'export_credentials', 'view_logs', 'manage_admins', 'manage_settings'];
 
+// Hak akses per role. Menu di dashboard admin mengikuti daftar ini (menu tanpa izin otomatis tidak tampil).
+//  - Surveyor                : semua menu dan hak akses
+//  - Admin Digitalisasi Ormas: tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan
+//  - Kepala Bidang Poldagri  : tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan
+const TANPA_KELOLA = ['manage_admins', 'export_credentials', 'manage_settings'];
+export const ROLE_PERMS = {
+  'Admin Digitalisasi Ormas': PERMS.filter((p) => !TANPA_KELOLA.includes(p)),
+  'Kepala Bidang Poldagri': PERMS.filter((p) => !TANPA_KELOLA.includes(p)),
+  'Surveyor': [...PERMS],
+};
+
 db.exec(`
 create table if not exists kategori(id integer primary key autoincrement, nama_kategori text unique not null, status_aktif integer not null default 1);
 create table if not exists roles(id integer primary key autoincrement, nama_role text unique not null, permissions text not null);
@@ -75,21 +86,40 @@ const now = () => new Date().toISOString();
 const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(9).toString('base64url');
 if (!db.prepare('select 1 from roles limit 1').get()) {
   db.transaction(() => {
-    const defaults = { app_name: 'SIDOMAS', max_pdf_mb: 20, max_pdf_count: 10, session_minutes: 120, login_max_attempts: 10, catalog_public: 'true', recovery_from: 'no-reply@sidomas.local', ormas_seq: 0 };
+    const defaults = { app_name: 'SIDOMAS', max_pdf_mb: 20, max_pdf_count: 10, session_minutes: 120, login_max_attempts: 10, catalog_public: 'true', recovery_from: 'no-reply@sidomas.local', ormas_seq: 0, roles_v2: 'done' };
     for (const [k, v] of Object.entries(defaults)) setSetting(k, v);
     const ins = db.prepare('insert into roles(nama_role,permissions) values(?,?)');
-    ins.run('Admin Digitalisasi Ormas', JSON.stringify(PERMS));
-    ins.run('Kepala Bidang Poldagri', JSON.stringify(PERMS.filter((p) => !['manage_admins', 'manage_settings', 'export_credentials'].includes(p))));
+    for (const [nama, perms] of Object.entries(ROLE_PERMS)) ins.run(nama, JSON.stringify(perms));
     for (const k of ['Sosial dan Kemanusiaan', 'Keagamaan', 'Kepemudaan', 'Pendidikan', 'Kebudayaan', 'Lingkungan Hidup', 'Profesi', 'Hukum dan HAM', 'Ekonomi dan Kewirausahaan', 'Lainnya'])
       db.prepare('insert into kategori(nama_kategori,urutan) values(?,(select coalesce(max(urutan),0)+1 from kategori))').run(k);
-    // Akun admin awal: wajib ganti password saat login pertama.
+    // Akun admin awal (role Surveyor, akses penuh): wajib ganti password saat login pertama.
     // Password awal diambil dari ADMIN_INITIAL_PASSWORD; jika kosong dibuat acak dan dicetak SEKALI di log server.
+    const surveyorId = db.prepare(`select id from roles where nama_role='Surveyor'`).get().id;
     db.prepare('insert into admin(nama,username,email,password_hash,role_id,must_change,created_at,updated_at) values(?,?,?,?,?,1,?,?)')
-      .run('Administrator Awal', 'admin', process.env.ADMIN_EMAIL || 'admin@sidomas.local', bcrypt.hashSync(initialPassword, 10), 1, now(), now());
+      .run('Administrator Awal', 'admin', process.env.ADMIN_EMAIL || 'admin@sidomas.local', bcrypt.hashSync(initialPassword, 10), surveyorId, now(), now());
   })();
   if (!process.env.ADMIN_INITIAL_PASSWORD) {
     console.log(`\n=== AKUN ADMIN AWAL DIBUAT ===\nUsername : admin\nPassword : ${initialPassword}\nCatat sekarang, password ini tidak ditampilkan lagi. Wajib diganti saat login pertama.\n`);
   }
+}
+
+// ---- Migrasi role v2 (berjalan sekali pada database lama) ----
+// - Menambah role Surveyor (akses penuh).
+// - Mengurangi hak role Admin Digitalisasi Ormas: tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan.
+// - Agar tidak ada yang terkunci dari Manajemen Admin: jika setelah perubahan tidak ada akun aktif yang
+//   memegang hak manage_admins, akun aktif tertua dijadikan Surveyor.
+if (getSetting('roles_v2') !== 'done') {
+  db.transaction(() => {
+    const up = db.prepare('insert into roles(nama_role,permissions) values(?,?) on conflict(nama_role) do update set permissions=excluded.permissions');
+    up.run('Admin Digitalisasi Ormas', JSON.stringify(ROLE_PERMS['Admin Digitalisasi Ormas']));
+    up.run('Surveyor', JSON.stringify(ROLE_PERMS['Surveyor']));
+    const aktif = db.prepare(`select a.id,r.permissions from admin a join roles r on r.id=a.role_id where a.status_akun='aktif' order by a.id`).all();
+    if (aktif.length && !aktif.some((a) => JSON.parse(a.permissions).includes('manage_admins'))) {
+      db.prepare(`update admin set role_id=(select id from roles where nama_role='Surveyor'),updated_at=? where id=?`).run(now(), aktif[0].id);
+      console.log('Migrasi role: akun aktif tertua dijadikan Surveyor agar Manajemen Admin tetap bisa diakses.');
+    }
+    setSetting('roles_v2', 'done');
+  })();
 }
 
 // (Pembersihan otomatis data "(DEMO SIMULASI)" sudah dihapus: tidak ada data yang dihapus saat server start.)

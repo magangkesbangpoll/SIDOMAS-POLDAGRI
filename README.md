@@ -18,6 +18,12 @@ Sistem ini adalah sistem administrasi dan dokumentasi internal dengan katalog pu
 - **Sesi PDF terkunci admin**: jika admin membuat ulang password harian, ormas yang sedang membuka PDF otomatis mendapat pesan "Sesi Anda Telah Habis" (dicek tiap 3 detik).
 - **Penyimpanan Google Drive**: PDF dan logo di dua folder Drive. Tiap ormas otomatis punya subfolder sendiri bernama sesuai nama ormas (berisi PDF-nya di folder PDF, dan logonya di folder Logo), plus backup database harian otomatis.
 
+## Role dan hak akses
+- **Surveyor**: semua menu dan hak akses, termasuk Manajemen Admin, Ekspor Kredensial, dan Pengaturan.
+- **Admin Digitalisasi Ormas**: Dashboard, Data Ormas (lihat, ubah, verifikasi), Dokumen Kedaluwarsa, Notifikasi, Password Harian, Ekspor Data (CSV ormas), dan Log Aktivitas. Tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan.
+- **Kepala Bidang Poldagri**: hak akses sama dengan Admin Digitalisasi Ormas.
+- Menu dan tombol mengikuti hak akses role; server tetap memeriksa izin pada setiap permintaan. Akun admin awal (`admin`) berperan Surveyor. Pada database lama, migrasi berjalan sekali saat server start dan memastikan minimal satu akun aktif tetap berperan Surveyor.
+
 ## Menjalankan di komputer sendiri
 Prasyarat: Node.js 18 atau lebih baru.
 1. `npm install`, lalu `cd client`, `npm install`, `cd ..` (atau `npm run setup`).
