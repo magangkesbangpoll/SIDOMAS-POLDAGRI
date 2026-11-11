@@ -33,6 +33,11 @@ create table if not exists akun_ormas(ormas_id integer primary key references or
 create table if not exists reset_tokens_ormas(id integer primary key autoincrement, ormas_id integer not null references ormas(id) on delete cascade, token_hash text unique not null, expires_at text not null, used integer not null default 0);
 -- Perubahan data dari portal ormas yang MENUNGGU verifikasi admin (data katalog tetap memakai tabel ormas sampai diverifikasi)
 create table if not exists perubahan_ormas(ormas_id integer primary key references ormas(id) on delete cascade, data text not null, logo_key text, logo_nama text, remove_logo integer not null default 0, status_sebelumnya text, created_at text not null, updated_at text not null);
+-- Notifikasi untuk admin (lonceng). 'kunci' dipakai agar pengingat yang sama tidak dibuat dua kali.
+create table if not exists notifikasi(id integer primary key autoincrement, jenis text not null, judul text not null, pesan text not null, ormas_id integer, kunci text unique, created_at text not null);
+create table if not exists notifikasi_baca(notif_id integer not null references notifikasi(id) on delete cascade, admin_id integer not null references admin(id) on delete cascade, primary key(notif_id, admin_id));
+-- Langganan notifikasi HP (Web Push) per perangkat admin
+create table if not exists push_langganan(id integer primary key autoincrement, admin_id integer not null references admin(id) on delete cascade, endpoint text unique not null, p256dh text not null, auth text not null, created_at text not null);
 create index if not exists idx_ormas_nama on ormas(nama_ormas);
 create index if not exists idx_ormas_kat on ormas(kategori_id);
 create index if not exists idx_ormas_status on ormas(status_dokumen, status_operasional, status_publikasi);
@@ -43,8 +48,11 @@ create index if not exists idx_log_waktu on log_aktivitas(waktu_aktivitas);
 
 // Migrasi untuk database yang dibuat sebelum kolom kontak ditambahkan
 const cols = db.prepare('pragma table_info(ormas)').all().map((c) => c.name);
-for (const c of ['nomor_whatsapp_ketua', 'alamat', 'email_ormas', 'sekretaris', 'bendahara', 'kemantren', 'bentuk', 'bidang_kegiatan', 'legal_jenis', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'validasi', 'catatan_penolakan'])
+for (const c of ['nomor_whatsapp_ketua', 'alamat', 'email_ormas', 'sekretaris', 'bendahara', 'kemantren', 'bentuk', 'bidang_kegiatan', 'legal_jenis', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'validasi', 'catatan_penolakan', 'link_dokumentasi', 'link_instagram'])
   if (!cols.includes(c)) db.exec(`alter table ormas add column ${c} text`);
+// Jumlah anggota (hanya angka, tanpa nama)
+for (const c of ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas', 'anggota_total'])
+  if (!cols.includes(c)) db.exec(`alter table ormas add column ${c} integer`);
 if (!db.prepare('pragma table_info(dokumen_ormas)').all().some((c) => c.name === 'jenis_dokumen')) db.exec('alter table dokumen_ormas add column jenis_dokumen text');
 // pending=1: PDF kiriman ormas yang menunggu verifikasi (belum tampil di katalog, belum masuk Google Drive)
 if (!db.prepare('pragma table_info(dokumen_ormas)').all().some((c) => c.name === 'pending')) db.exec('alter table dokumen_ormas add column pending integer not null default 0');
@@ -81,15 +89,4 @@ if (!db.prepare('select 1 from roles limit 1').get()) {
   }
 }
 
-// Pembersihan data contoh dari versi lama: hapus ormas bertanda "(DEMO SIMULASI)".
-// Jika setelah itu tidak ada ormas tersisa, penomoran ID dimulai lagi dari Ormas-001.
-{
-  const lama = db.prepare("select id from ormas where nama_ormas like '%(DEMO SIMULASI)%'").all();
-  if (lama.length) {
-    db.transaction(() => {
-      for (const o of lama) db.prepare('delete from ormas where id=?').run(o.id);
-      if (!db.prepare('select 1 from ormas limit 1').get()) setSetting('ormas_seq', 0);
-    })();
-    console.log(`Data contoh lama dihapus: ${lama.length} ormas.`);
-  }
-}
+// (Pembersihan otomatis data "(DEMO SIMULASI)" sudah dihapus: tidak ada data yang dihapus saat server start.)
