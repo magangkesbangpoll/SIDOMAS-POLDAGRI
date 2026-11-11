@@ -11,6 +11,11 @@ Sistem ini adalah sistem administrasi dan dokumentasi internal dengan katalog pu
 - **Portal ormas** (`/ormas-login`): tiap ormas punya akun tetap untuk memperbarui data dan dokumennya sendiri.
 - **Dashboard admin**: statistik, data ormas, password harian, manajemen admin (tambah, ubah, nonaktifkan, hapus), ekspor CSV, log aktivitas, pengaturan.
 - **Verifikasi perubahan**: perubahan data atau PDF dari portal ormas ditahan dulu. Katalog publik dan Google Drive tetap memakai data lama sampai admin menekan **Verifikasi** (atau **Tolak**) di Detail Ormas.
+- **Status validasi** (dropdown Terdata / Terdaftar / Teregister) dan **jumlah anggota** (total, perempuan, lansia, disabilitas; angka saja). Jumlah anggota tampil di katalog satu baris dengan ketua, sekretaris, dan bendahara.
+- **Dokumentasi kegiatan** (opsional): unggah PDF atau tempel tautan (mis. Google Drive), plus tautan Instagram ormas.
+- **Peringatan masa berlaku SKTO / Legal Standing**: label "Segera berakhir" / "Sudah kedaluwarsa" di Data Ormas, menu **Dokumen Kedaluwarsa** (dihitung dari tanggal Berlaku s/d), dan pengingat otomatis.
+- **Notifikasi admin**: lonceng dengan titik merah, hilang setelah klik "Sudah dibaca". Notifikasi HP (Web Push): "Admin (nama) Telah Memperbarui, CEK SELENGKAPNYA!" dan "Ormas (nama) Telah Melakukan Perubahan, CEK SELENGKAPNYA DAN KONFIRMASI PERUBAHAN". Aktifkan per perangkat di menu Notifikasi (butuh HTTPS atau localhost).
+- **Sesi PDF terkunci admin**: jika admin membuat ulang password harian, ormas yang sedang membuka PDF otomatis mendapat pesan "Sesi Anda Telah Habis" (dicek tiap 3 detik).
 - **Penyimpanan Google Drive**: PDF dan logo di dua folder Drive. Tiap ormas otomatis punya subfolder sendiri bernama sesuai nama ormas (berisi PDF-nya di folder PDF, dan logonya di folder Logo), plus backup database harian otomatis.
 
 ## Menjalankan di komputer sendiri

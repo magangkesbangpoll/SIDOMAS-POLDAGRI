@@ -667,6 +667,7 @@ app.post('/api/admin/ormas/:id/portal-reset', auth('manage_ormas'), (req, res) =
   if (!o) return res.status(404).json({ error: 'Data tidak ditemukan' });
   const portal = newPortalAccount(o.id, o.kode_ormas);
   log(req, 'reset_akun_ormas', o.id, `Admin membuat/mengatur ulang password portal ${o.kode_ormas}`);
+  notifAdmin(req, `Mengatur ulang password portal ${o.kode_ormas}`, o.id);
   res.json(portal);
 });
 
@@ -788,6 +789,8 @@ app.post('/api/admin/credentials/:id/regenerate', auth('manage_credentials'), (r
   const id = +req.params.id; if (!db.prepare('select 1 from ormas where id=?').get(id)) return res.status(404).json({ error: 'Data tidak ditemukan' });
   makeCred(id); const c = todayCred(id); // kredensial lama berstatus 'diganti', sehingga sesi PDF ormas yang sedang terbuka langsung tidak sah
   log(req, 'regenerasi_kredensial', id, 'Regenerasi kredensial harian');
+  const oo = db.prepare('select kode_ormas,nama_ormas from ormas where id=?').get(id);
+  notifAdmin(req, `Membuat ulang password harian ${oo.kode_ormas} (${oo.nama_ormas}). Sesi PDF ormas yang sedang terbuka ditutup.`, id);
   res.json({ username: c.username, password: dec(c.password_enc) });
 });
 
@@ -801,7 +804,7 @@ app.get('/api/admin/export/ormas', auth('export'), (req, res) => {
   const { items } = listOrmas(req.query, { paginate: false });
   log(req, 'ekspor_csv', null, `Ekspor CSV ${items.length} data ormas`);
   sendCsv(res, `data-ormas-${today()}.csv`,
-    ['ID Ormas', 'Nama Ormas', 'Bidang (Kategori)', 'Bentuk', 'Bidang Kegiatan', 'Kemantren', 'Alamat Kantor/Sekretariat', 'Nomor Telepon', 'Email Ormas', 'Ketua', 'Sekretaris', 'Bendahara', 'Legal Standing - Jenis', 'Legal Standing - Nomor', 'Legal Standing - Tahun', 'Legal Standing - Berlaku s/d', 'SKTO - Nomor', 'SKTO - Tahun', 'SKTO - Berlaku s/d', 'Validasi', 'Jumlah Anggota', 'Anggota Perempuan', 'Anggota Lansia', 'Anggota Disabilitas', 'Link Dokumentasi', 'Instagram', 'Status Dokumen', 'Status Operasional', 'Status Publikasi', 'Dokumen Wajib Terunggah (dari 5)', 'Tanggal Dibuat', 'Tanggal Diperbarui'],
+    ['ID Ormas', 'Nama Ormas', 'Bidang (Kategori)', 'Bentuk', 'Bidang Kegiatan', 'Kemantren', 'Alamat Kantor/Sekretariat', 'Nomor Telepon', 'Email Ormas', 'Ketua', 'Sekretaris', 'Bendahara', 'Legal Standing - Jenis', 'Legal Standing - Nomor', 'Legal Standing - Tahun', 'Legal Standing - Berlaku s/d', 'SKTO - Nomor', 'SKTO - Tahun', 'SKTO - Berlaku s/d', 'Status Validasi', 'Jumlah Anggota', 'Anggota Perempuan', 'Anggota Lansia', 'Anggota Disabilitas', 'Link Dokumentasi', 'Instagram', 'Status Dokumen', 'Status Operasional', 'Status Publikasi', 'Dokumen Wajib Terunggah (dari 5)', 'Tanggal Dibuat', 'Tanggal Diperbarui'],
     items.map((o) => [o.kode_ormas, o.nama_ormas, o.nama_kategori, o.bentuk, o.bidang_kegiatan, o.kemantren, o.alamat, o.nomor_whatsapp_ketua, o.email_ormas, o.nama_ketua, o.sekretaris, o.bendahara, o.legal_jenis, o.nomor_sk, o.legal_tahun, o.legal_berlaku_sd, o.skto_nomor, o.skto_tahun, o.skto_berlaku_sd, o.validasi, o.anggota_total, o.anggota_perempuan, o.anggota_lansia, o.anggota_disabilitas, o.link_dokumentasi, o.link_instagram, o.status_dokumen, o.status_operasional, o.status_publikasi, o.jumlah_dok, o.created_at, o.updated_at]));
 });
 app.get('/api/admin/export/credentials', auth('export_credentials'), (req, res) => {
@@ -839,7 +842,7 @@ app.post('/api/admin/accounts', auth('manage_admins'), (req, res) => {
   const b = req.body || {}, err = validAcc(b, true); if (err) return res.status(400).json({ error: err });
   try {
     const id = db.prepare('insert into admin(nama,username,email,password_hash,role_id,must_change,created_at,updated_at) values(?,?,?,?,?,1,?,?)').run(b.nama.trim(), b.username, b.email.trim().toLowerCase(), bcrypt.hashSync(b.password, 10), +b.role_id, now(), now()).lastInsertRowid;
-    log(req, 'tambah_admin', null, `Menambah akun ${b.username}`); res.json({ id });
+    log(req, 'tambah_admin', null, `Menambah akun ${b.username}`); notifAdmin(req, `Menambah akun admin ${b.username}`); res.json({ id });
   } catch { res.status(400).json({ error: 'Username atau email sudah digunakan' }); }
 });
 app.put('/api/admin/accounts/:id', auth('manage_admins'), (req, res) => {
@@ -856,6 +859,7 @@ app.put('/api/admin/accounts/:id', auth('manage_admins'), (req, res) => {
   } catch { return res.status(400).json({ error: 'Email sudah digunakan' }); }
   if (+b.role_id !== t.role_id) log(req, 'ubah_role', null, `Mengubah role akun ${t.username}`);
   log(req, 'ubah_admin', null, `Mengubah akun ${t.username}${b.password ? ' (reset password)' : ''}${status !== t.status_akun ? ` (${status})` : ''}`);
+  notifAdmin(req, `Mengubah akun admin ${t.username}${status !== t.status_akun ? ` (${status})` : ''}`);
   res.json({ ok: true });
 });
 
@@ -872,6 +876,7 @@ app.delete('/api/admin/accounts/:id', auth('manage_admins'), (req, res) => {
     db.prepare('delete from admin where id=?').run(id); // token reset ikut terhapus (cascade)
   })();
   log(req, 'hapus_admin', null, `Menghapus akun ${t.username}`);
+  notifAdmin(req, `Menghapus akun admin ${t.username}`);
   res.json({ ok: true });
 });
 
@@ -889,7 +894,7 @@ app.put('/api/admin/settings', auth('manage_settings'), (req, res) => {
   if (!rng('login_max_attempts', 3, 50)) return res.status(400).json({ error: 'Batas percobaan login 3-50' });
   if (!/^[^@\s]+@[^@\s]+$/.test(b.recovery_from || '')) return res.status(400).json({ error: 'Email pengirim tidak valid' });
   db.transaction(() => SETTING_KEYS.forEach((k) => setSetting(k, k === 'catalog_public' ? (b[k] === true || b[k] === 'true') : String(b[k]).trim())))();
-  log(req, 'ubah_pengaturan', null, 'Mengubah pengaturan sistem'); res.json({ ok: true });
+  log(req, 'ubah_pengaturan', null, 'Mengubah pengaturan sistem'); notifAdmin(req, 'Mengubah pengaturan sistem'); res.json({ ok: true });
 });
 app.put('/api/admin/categories', auth('manage_settings'), (req, res) => {
   const list = req.body?.items;
@@ -921,6 +926,7 @@ app.put('/api/admin/categories', auth('manage_settings'), (req, res) => {
     })();
   } catch { return res.status(400).json({ error: 'Gagal menyimpan kategori. Periksa nama yang ganda.' }); }
   log(req, 'ubah_pengaturan', null, `Mengubah daftar kategori (${list.length} kategori)`);
+  notifAdmin(req, `Mengubah daftar kategori (${list.length} kategori)`);
   res.json({ ok: true, categories: db.prepare('select * from kategori order by urutan,id').all() });
 });
 
@@ -947,4 +953,4 @@ ensureAll();
 setInterval(ensureAll, 60 * 60 * 1000); // scheduler; lazy rotation tetap berlaku sebagai cadangan
 setTimeout(cekKedaluwarsa, 20 * 1000); // pengingat SKTO / legal standing yang hampir atau sudah kedaluwarsa
 setInterval(cekKedaluwarsa, 6 * 3600 * 1000);
-app.listen(PORT, () => console.log(`SIDOMAS server berjalan di http://localhost:${PORT} [versi: verifikasi-perubahan + notifikasi-admin + kedaluwarsa-dokumen]`));
+app.listen(PORT, () => console.log(`SIDOMAS server berjalan di http://localhost:${PORT} [versi: v2 anggota + dokumentasi + notifikasi + kedaluwarsa + sesi-PDF]`));

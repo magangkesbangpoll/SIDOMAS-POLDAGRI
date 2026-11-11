@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, ExternalLink, KeyRound, LogOut, Save } from 'lucide-react';
 import { api } from '../api';
-import { Badge, DOC_TYPES, ErrorBox, KEMANTREN, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
+import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, DOKUMENTASI, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
 import { ChangePassword, PasswordInput, Shell } from './AdminAuth';
 
 export function PortalLogin() {
@@ -50,7 +50,7 @@ export function PortalReset() {
   );
 }
 
-const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd'];
+const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram'];
 
 export function PortalHome() {
   const nav = useNavigate(); const toast = useToast();
@@ -74,7 +74,11 @@ export function PortalHome() {
   };
   const logout = async () => { await api('/portal/logout', { method: 'POST', body: {} }).catch(() => {}); nav('/ormas-login'); };
   const save = async (e: React.FormEvent) => {
-    e.preventDefault(); if (busy) return; setBusy(true);
+    e.preventDefault(); if (busy) return;
+    const tot = f.anggota_total === '' ? null : +f.anggota_total; const rinci = ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'];
+    if (tot == null && rinci.some((k) => f[k] !== '')) return toast('Isi juga jumlah total anggota', false);
+    if (tot != null && rinci.some((k) => f[k] !== '' && +f[k] > tot)) return toast('Rincian anggota tidak boleh lebih besar dari jumlah total', false);
+    setBusy(true);
     const fd = new FormData(); KEYS.forEach((k) => fd.append(k, String(f[k] ?? ''))); Object.entries(files).forEach(([j, x]) => fd.append(j, x)); if (logo) fd.append('logo', logo); if (rmLogo) fd.append('remove_logo', '1');
     try {
       const r = await api('/portal/profile', { method: 'PUT', form: fd });
@@ -104,10 +108,12 @@ export function PortalHome() {
           {H('Kontak dan Alamat')}
           {T('email_ormas', 'Email ormas (dipakai untuk pemulihan password)', { type: 'email', span: true })}
           <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat <span className="font-normal text-slate-500">(tulis selengkap mungkin, dipakai untuk peta di halaman publik)</span></label><textarea id="al" rows={2} maxLength={500} className="inp" value={f.alamat ?? ''} onChange={(e) => set('alamat', e.target.value)} /></div>
+          {H('Jumlah Anggota')}
+          <MemberInputs f={f} set={set} />
           {H('Legal Standing')}
-          {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}{T('legal_berlaku_sd', 'Berlaku s/d')}
+          {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d" forever value={f.legal_berlaku_sd ?? ''} onChange={(v) => set('legal_berlaku_sd', v)} />
           {H('SKTO')}
-          {T('skto_nomor', 'Nomor')}{T('skto_tahun', 'Tahun', { max: 4, ph: '2024' })}{T('skto_berlaku_sd', 'Berlaku s/d')}
+          {T('skto_nomor', 'Nomor')}{T('skto_tahun', 'Tahun', { max: 4, ph: '2024' })}<BerlakuInput id="skto_berlaku_sd" label="Berlaku s/d" value={f.skto_berlaku_sd ?? ''} onChange={(v) => set('skto_berlaku_sd', v)} />
           {H(`Dokumen PDF (maks. ${maxMb} MB per file)`)}
           <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
             {DOC_TYPES.map(([j, l]) => { const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
@@ -118,6 +124,15 @@ export function PortalHome() {
                 {cur && <button type="button" className="mt-1 text-xs font-semibold text-navy-700 underline" onClick={() => setView(view?.id === cur.id ? null : cur)}><ExternalLink size={12} className="mr-1 inline" />{view?.id === cur.id ? 'Tutup PDF' : 'Lihat PDF tersimpan'}</button>}
               </div>); })}
           </div>
+          {H('Dokumentasi Kegiatan dan Media Sosial (opsional)')}
+          <LinkInputs f={f} set={set} />
+          {(() => { const [j, l] = DOKUMENTASI; const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
+            <div className={`rounded-md border p-3 md:col-span-2 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
+              <label className="lbl" htmlFor="f_dok">Unggah {l} (PDF)</label>
+              <input id="f_dok" type="file" accept="application/pdf" className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
+              <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}){cur.pending ? ' · menunggu verifikasi admin' : ''}. Pilih file baru untuk mengganti.</> : 'Tidak wajib. Kumpulkan foto kegiatan menjadi satu PDF, atau cukup pakai link di atas.'}</p>
+              {cur && <button type="button" className="mt-1 text-xs font-semibold text-navy-700 underline" onClick={() => setView(view?.id === cur.id ? null : cur)}><ExternalLink size={12} className="mr-1 inline" />{view?.id === cur.id ? 'Tutup PDF' : 'Lihat PDF tersimpan'}</button>}
+            </div>); })()}
           {view && <iframe title={view.nama_file} src={`/api/portal/files/${view.id}`} className="h-[60vh] w-full rounded border border-slate-300 md:col-span-2" />}
           <div className="flex justify-end md:col-span-2"><button className="btn-p" disabled={busy}><Save size={16} /> {busy ? 'Menyimpan…' : 'Simpan perubahan'}</button></div>
         </form>

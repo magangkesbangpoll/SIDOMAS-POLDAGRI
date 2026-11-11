@@ -102,3 +102,75 @@ export const qs = (o: Record<string, any>) => new URLSearchParams(Object.entries
 
 export const DOC_TYPES: [string, string][] = [['sk_pengurusan', 'SK Pengurusan'], ['surat_domisili', 'Surat Keterangan Domisili'], ['program_kerja', 'Program Kerja'], ['badan_hukum', 'Salinan Badan Hukum'], ['skto', 'SKTO']];
 export const KEMANTREN = ['Danurejan', 'Gedongtengen', 'Gondokusuman', 'Gondomanan', 'Jetis', 'Kotagede', 'Kraton', 'Mantrijeron', 'Mergangsan', 'Ngampilan', 'Pakualaman', 'Tegalrejo', 'Umbulharjo', 'Wirobrajan'];
+
+// ---------- Tambahan: status validasi, dokumentasi, masa berlaku, Instagram ----------
+export const VALIDASI = ['Terdata', 'Terdaftar', 'Teregister'];
+export const DOKUMENTASI: [string, string] = ['dokumentasi', 'Dokumentasi Kegiatan (opsional)'];
+export const ANGGOTA_KEYS = ['anggota_total', 'anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'];
+// Rincian anggota: hanya bagian yang terisi, mis. "50 perempuan · 10 lansia"
+export const rincian = (o: any, short = false) => [['anggota_perempuan', 'perempuan', 'P'], ['anggota_lansia', 'lansia', 'L'], ['anggota_disabilitas', 'disabilitas', 'D']].filter(([k]) => o[k] != null && o[k] !== '').map(([k, l, s]) => (short ? `${s} ${nf(o[k])}` : `${nf(o[k])} ${l}`)).join(' · ');
+export const nf = (n: any) => (n == null || n === '' ? '-' : Number(n).toLocaleString('id-ID'));
+export const tglIndo = (iso?: string | null) => (iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('id-ID', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' }) : '-');
+
+export const InstagramIcon = ({ size = 16, className = '' }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" />
+  </svg>
+);
+
+export interface Exp { status: string; tgl?: string; hari?: number }
+// Peringatan masa berlaku SKTO / legal standing (dihitung server dari tanggal "Berlaku s/d")
+export function ExpBadge({ e, full = false }: { e?: Exp; full?: boolean }) {
+  if (!e || !e.tgl || e.hari == null) return null;
+  const h = e.hari;
+  if (e.status === 'kedaluwarsa') return <span className="mt-1 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">Sudah kedaluwarsa{full ? ` sejak ${tglIndo(e.tgl)}` : ''} ({-h} hari lalu)</span>;
+  if (e.status === 'segera') return <span className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{h === 0 ? 'Berakhir hari ini' : h <= 60 ? `Segera berakhir: ${h} hari lagi` : `Berakhir ± ${Math.round(h / 30)} bulan lagi`}{full ? ` (${tglIndo(e.tgl)})` : ''}</span>;
+  return null;
+}
+
+// Input "Berlaku s/d": pilih tanggal (tanggal, bulan, tahun). Isian teks lama tetap tampil sampai diganti.
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+export function BerlakuInput({ id, label, value, onChange, forever = false, span = false }: { id: string; label: string; value: string; onChange: (v: string) => void; forever?: boolean; span?: boolean }) {
+  const isForever = /seumur\s*hidup/i.test(value || '');
+  const legacy = !!value && !ISO.test(value) && !isForever;
+  return (
+    <div className={span ? 'md:col-span-2' : ''}>
+      <label className="lbl" htmlFor={id}>{label}</label>
+      {legacy ? (
+        <div><input id={id} className="inp" value={value} onChange={(e) => onChange(e.target.value)} />
+          <p className="mt-1 text-xs text-amber-700">Format lama. <button type="button" className="font-semibold underline" onClick={() => onChange('')}>Ganti dengan tanggal</button> agar pengingat kedaluwarsa akurat.</p></div>
+      ) : (
+        <>
+          <input id={id} type="date" className="inp" value={ISO.test(value) ? value : ''} disabled={isForever} onChange={(e) => onChange(e.target.value)} />
+          {forever && <label className="mt-1 flex items-center gap-2 text-xs"><input type="checkbox" checked={isForever} onChange={(e) => onChange(e.target.checked ? 'Seumur hidup' : '')} />Seumur hidup / tanpa batas waktu</label>}
+        </>
+      )}
+    </div>
+  );
+}
+
+export const MEMBER_FIELDS: [string, string][] = [['anggota_total', 'Jumlah total anggota'], ['anggota_perempuan', 'Jumlah perempuan'], ['anggota_lansia', 'Jumlah lansia'], ['anggota_disabilitas', 'Jumlah disabilitas']];
+// Isian jumlah anggota (angka saja)
+export function MemberInputs({ f, set }: { f: any; set: (k: string, v: any) => void }) {
+  return (
+    <>
+      {MEMBER_FIELDS.map(([k, l]) => (
+        <div key={k}><label className="lbl" htmlFor={k}>{l}</label>
+          <input id={k} type="number" min={0} max={9999999} step={1} inputMode="numeric" className="inp" placeholder="0" value={f[k] ?? ''} onChange={(e) => set(k, e.target.value.replace(/\D/g, ''))} /></div>
+      ))}
+      <p className="text-xs text-slate-500 md:col-span-2">Isi angka saja (tanpa nama anggota). Rincian perempuan, lansia, dan disabilitas boleh saling beririsan, jadi tidak harus berjumlah sama dengan total, tetapi tiap rincian tidak boleh lebih besar dari total.</p>
+    </>
+  );
+}
+
+// Tautan dokumentasi (mis. Google Drive) dan Instagram
+export function LinkInputs({ f, set }: { f: any; set: (k: string, v: any) => void }) {
+  return (
+    <>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_dokumentasi">Link dokumentasi kegiatan (opsional) <span className="font-normal text-slate-500">mis. folder Google Drive</span></label>
+        <input id="link_dokumentasi" type="url" className="inp" maxLength={500} placeholder="https://drive.google.com/..." value={f.link_dokumentasi ?? ''} onChange={(e) => set('link_dokumentasi', e.target.value)} /></div>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_instagram"><InstagramIcon size={14} className="mr-1 inline text-pink-600" />Instagram ormas (opsional) <span className="font-normal text-slate-500">tautan atau @username</span></label>
+        <input id="link_instagram" className="inp" maxLength={200} placeholder="@namaormas atau https://instagram.com/namaormas" value={f.link_instagram ?? ''} onChange={(e) => set('link_instagram', e.target.value)} /></div>
+    </>
+  );
+}

@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Building2, FileDown, KeyRound, LayoutDashboard, LogOut, Menu, ScrollText, Settings, Users } from 'lucide-react';
+import { Bell, Building2, CalendarClock, FileDown, KeyRound, LayoutDashboard, LogOut, Menu, ScrollText, Settings, Users } from 'lucide-react';
 import { api } from '../api';
 import { ChangePassword } from './AdminAuth';
+import { NotifBell } from './Notifikasi';
 
 const Ctx = createContext<any>(null);
 export const useAuth = () => useContext(Ctx);
 const MENU: [string, string, any, string | null][] = [
-  ['/admin', 'Dashboard', LayoutDashboard, null], ['/admin/ormas', 'Data Ormas', Building2, 'view_ormas'], ['/admin/password-harian', 'Password Harian', KeyRound, 'view_credentials'],
+  ['/admin', 'Dashboard', LayoutDashboard, null], ['/admin/ormas', 'Data Ormas', Building2, 'view_ormas'], ['/admin/kedaluwarsa', 'Dokumen Kedaluwarsa', CalendarClock, 'view_ormas'], ['/admin/notifikasi', 'Notifikasi', Bell, null], ['/admin/password-harian', 'Password Harian', KeyRound, 'view_credentials'],
   ['/admin/akun', 'Manajemen Admin', Users, 'manage_admins'], ['/admin/ekspor', 'Ekspor Data', FileDown, 'export'], ['/admin/log', 'Log Aktivitas', ScrollText, 'view_logs'], ['/admin/pengaturan', 'Pengaturan', Settings, 'manage_settings'],
 ];
 
@@ -32,7 +33,7 @@ export function AdminShell() {
         <div className="min-w-0 flex-1">
           <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
             <button className="btn-o px-2" aria-label="Menu" onClick={() => (window.innerWidth < 768 ? setOpen(!open) : setCollapsed(!collapsed))}><Menu size={18} /></button>
-            <div className="text-right text-sm"><p className="font-semibold text-navy-900">{me.nama}</p><p className="text-xs text-slate-500">{me.role}</p></div>
+            <div className="flex items-center gap-3"><NotifBell /><div className="text-right text-sm"><p className="font-semibold text-navy-900">{me.nama}</p><p className="text-xs text-slate-500">{me.role}</p></div></div>
           </header>
           <main className="p-4 md:p-6"><Outlet /></main>
         </div>

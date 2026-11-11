@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Building2, Download, ExternalLink, FileText, Lock, Mail, MapPin, MessageCircle, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Building2, Download, ExternalLink, FileText, Link2, Lock, Mail, MapPin, MessageCircle, Search, ShieldCheck, Users } from 'lucide-react';
 import { api } from '../api';
-import { Badge, DOC_STATUS, DOC_TYPES, Empty, ErrorBox, Modal, Pager, fmtDate, fmtSize, qs, useDebounced, useFetch } from '../ui';
+import { Badge, DOC_STATUS, DOC_TYPES, DOKUMENTASI, Empty, InstagramIcon, nf, rincian, ErrorBox, Modal, Pager, fmtDate, fmtSize, qs, useDebounced, useFetch } from '../ui';
 
 export const useMeta = () => useFetch<any>('/public/meta');
 const waNumber = (n: string) => n.replace(/\D/g, '').replace(/^0/, '62'); // 0812... -> 62812... untuk tautan wa.me
@@ -106,7 +106,7 @@ export function Catalog() {
                   {o.has_logo ? <img src={`/api/logo/${o.kode_ormas}?v=${encodeURIComponent(o.updated_at)}`} alt="" className="h-14 w-14 rounded border border-slate-200 object-cover" /> : <span className="grid h-14 w-14 shrink-0 place-items-center rounded bg-navy-50 text-navy-700"><Building2 /></span>}
                   <div className="min-w-0"><h3 className="font-serif text-base font-bold leading-snug text-navy-900">{o.nama_ormas}</h3><p className="mt-0.5 text-xs text-slate-500">{o.kode_ormas}</p></div>
                 </div>
-                <dl className="mt-3 space-y-0.5 text-xs text-slate-600">{[['Ketua', o.nama_ketua], ['Sekretaris', o.sekretaris], ['Bendahara', o.bendahara]].map(([l, v]) => <div key={l} className="flex gap-2"><dt className="w-20 shrink-0 text-slate-500">{l}</dt><dd className="font-semibold">{v || '-'}</dd></div>)}</dl>
+                <dl className="mt-3 space-y-0.5 text-xs text-slate-600">{[['Ketua', o.nama_ketua], ['Sekretaris', o.sekretaris], ['Bendahara', o.bendahara], ['Anggota', o.anggota_total == null ? null : `${nf(o.anggota_total)} orang`]].map(([l, v]) => <div key={l} className="flex gap-2"><dt className="w-20 shrink-0 text-slate-500">{l}</dt><dd className="font-semibold">{v || '-'}</dd></div>)}</dl>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{o.nama_kategori}</span><Badge s={o.status_dokumen} /></div>
                 <Link to={`/ormas/${o.kode_ormas}`} className="btn-p mt-4">Lihat Data Ormas</Link>
               </article>
@@ -151,11 +151,28 @@ export function OrmasPublic() {
   const { kode } = useParams();
   const { data: o, loading, error, reload } = useFetch<any>(`/public/ormas/${kode}`);
   const [ask, setAsk] = useState<{ doc: any; dl: boolean } | null>(null); const [view, setView] = useState<any>(null); const [acc, setAcc] = useState<any>(() => readAcc(kode));
-  useEffect(() => { if (!acc) return; const t = setTimeout(() => { setAcc(null); setView(null); }, Math.max(0, new Date(acc.expires_at).getTime() - Date.now())); return () => clearTimeout(t); }, [acc]);
+  const [habis, setHabis] = useState(false);
+  const akhiri = () => { try { sessionStorage.removeItem('acc_' + kode); } catch {} setAcc(null); setView(null); setAsk(null); setHabis(true); };
+  // Sesi berakhir saat waktunya habis
+  useEffect(() => { if (!acc) return; const t = setTimeout(akhiri, Math.max(0, new Date(acc.expires_at).getTime() - Date.now())); return () => clearTimeout(t); }, [acc]);
+  // Cek ke server tiap 3 detik: jika admin membuat ulang password harian, akses PDF langsung ditutup (tanpa menunggu muat ulang)
+  useEffect(() => {
+    if (!acc) return; let off = false;
+    const cek = async () => { try { const r = await fetch(`/api/public/session?token=${encodeURIComponent(acc.token)}`, { cache: 'no-store' }); if (!off && r.status === 401) akhiri(); } catch { /* jaringan putus sesaat: abaikan */ } };
+    cek(); const t = setInterval(cek, 3000); const v = () => document.visibilityState === 'visible' && cek(); document.addEventListener('visibilitychange', v);
+    return () => { off = true; clearInterval(t); document.removeEventListener('visibilitychange', v); };
+  }, [acc?.token]);
   const url = (d: any, a: any, dl = false) => `/api/public/files/${d.id}?token=${encodeURIComponent(a.token)}${dl ? '&dl=1' : ''}`;
   const run = (d: any, dl: boolean, a: any) => { if (dl) window.location.href = url(d, a, true); else setView(view?.id === d.id ? null : d); };
-  const click = (d: any, dl: boolean) => { const a = readAcc(kode); if (a) run(d, dl, a); else { setAcc(null); setAsk({ doc: d, dl }); } };
-  const label = (j: string) => DOC_TYPES.find(([k]) => k === j)?.[1] || j;
+  const click = async (d: any, dl: boolean) => {
+    const a = readAcc(kode);
+    if (a) { // pastikan sesi masih sah sebelum membuka
+      try { const r = await fetch(`/api/public/session?token=${encodeURIComponent(a.token)}`, { cache: 'no-store' }); if (r.status === 401) return akhiri(); } catch {}
+      return run(d, dl, a);
+    }
+    setAcc(null); setAsk({ doc: d, dl });
+  };
+  const label = (j: string) => [...DOC_TYPES, DOKUMENTASI].find(([k]) => k === j)?.[1] || j;
   const byType = (j: string) => o?.docs.find((d: any) => d.jenis_dokumen === j);
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -167,7 +184,14 @@ export function OrmasPublic() {
             <div className="min-w-0 flex-1"><p className="text-sm text-slate-500">{o.kode_ormas}</p><h1 className="font-serif text-2xl font-bold text-navy-900">{o.nama_ormas}</h1><div className="mt-2 flex flex-wrap items-center gap-2 text-xs"><span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{o.nama_kategori}</span><Badge s={o.status_dokumen} /></div></div>
           </div>
           <div className="card p-5"><h2 className="mb-3 font-serif text-lg font-bold text-navy-900">Struktur Pengurus</h2>
-            <div className="grid gap-3 sm:grid-cols-3">{[['Ketua', o.nama_ketua], ['Sekretaris', o.sekretaris], ['Bendahara', o.bendahara]].map(([l, v]) => <div key={l} className="rounded-md bg-navy-50 p-3"><p className="text-xs text-slate-500">{l}</p><p className="font-semibold text-navy-900">{v || '-'}</p></div>)}</div></div>
+            <div className="grid gap-3 sm:grid-cols-4">{[['Ketua', o.nama_ketua], ['Sekretaris', o.sekretaris], ['Bendahara', o.bendahara]].map(([l, v]) => <div key={l} className="rounded-md bg-navy-50 p-3"><p className="text-xs text-slate-500">{l}</p><p className="font-semibold text-navy-900">{v || '-'}</p></div>)}
+              <div className="rounded-md bg-gold-400/20 p-3"><p className="flex items-center gap-1 text-xs text-slate-600"><Users size={13} />Jumlah anggota</p><p className="font-semibold text-navy-900">{o.anggota_total == null ? '-' : `${nf(o.anggota_total)} orang`}</p></div></div>
+            {o.anggota_total != null && rincian(o) && <p className="mt-3 text-sm text-slate-600">Dari total anggota: <b>{rincian(o)}</b></p>}</div>
+          {(o.link_dokumentasi || o.link_instagram) && <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Dokumentasi dan Media Sosial</h2>
+            <div className="flex flex-wrap gap-3 text-sm">
+              {o.link_dokumentasi && <a className="btn-o" target="_blank" rel="noopener noreferrer" href={o.link_dokumentasi}><Link2 size={16} /> Dokumentasi kegiatan</a>}
+              {o.link_instagram && <a className="btn-o" target="_blank" rel="noopener noreferrer" href={o.link_instagram}><InstagramIcon size={16} className="text-pink-600" /> Instagram ormas</a>}
+            </div></div>}
           <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Kontak</h2>
             <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
               <p className="flex min-w-0 items-center gap-2"><Mail size={16} className="shrink-0 text-navy-700" />{o.email_ormas ? <a className="min-w-0 text-navy-700 underline [overflow-wrap:anywhere]" href={`mailto:${o.email_ormas}`}>{o.email_ormas}</a> : <span className="text-slate-500">Email belum diisi</span>}</p>
@@ -180,7 +204,7 @@ export function OrmasPublic() {
             <p className="mt-1 text-xs text-slate-500">Letak pada peta dicari dari teks alamat, sehingga bisa kurang tepat.</p></div>}
           <div className="card divide-y divide-slate-100">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4"><h2 className="font-serif text-lg font-bold text-navy-900">Dokumen</h2><p className="flex items-center gap-1 text-xs text-slate-500"><Lock size={13} /> {acc ? `Akses terbuka hingga ${fmtDate(acc.expires_at)}` : 'Terbatas: perlu username dan password dari admin'}</p></div>
-            {DOC_TYPES.map(([j, l]) => { const d = byType(j); return (
+            {[...DOC_TYPES, DOKUMENTASI].filter(([j]) => j !== 'dokumentasi' || byType(j)).map(([j, l]) => { const d = byType(j); return (
               <div key={j} className="flex flex-wrap items-center justify-between gap-3 p-4">
                 <div className="flex items-center gap-3"><FileText className={d ? 'text-red-600' : 'text-slate-300'} /><div><p className="text-sm font-semibold">{l}</p><p className="text-xs text-slate-500">{d ? `PDF · ${fmtSize(d.ukuran_file)}` : 'Belum diunggah'}</p></div></div>
                 {d && <div className="flex gap-2"><button className="btn-p" onClick={() => click(d, false)}>{acc ? <ExternalLink size={15} /> : <Lock size={15} />} {view?.id === d.id ? 'Tutup PDF' : 'Buka PDF'}</button><button className="btn-o" onClick={() => click(d, true)}>{acc ? <Download size={15} /> : <Lock size={15} />} Download PDF</button></div>}
@@ -188,6 +212,7 @@ export function OrmasPublic() {
           </div>
           {view && acc && <div><p className="mb-2 text-sm font-semibold">{label(view.jenis_dokumen)}</p><iframe title={label(view.jenis_dokumen)} src={url(view, acc)} className="h-[75vh] w-full rounded-lg border border-slate-300 bg-white" /></div>}
         </div>)}
+      {habis && <Modal title="Sesi Berakhir" onClose={() => setHabis(false)}><p className="font-semibold text-red-700">Sesi Anda Telah Habis, Silahkan Minta Username dan Password Lagi Kepada Admin!</p><div className="mt-5 text-right"><button className="btn-p" onClick={() => setHabis(false)}>OK</button></div></Modal>}
       {ask && o && <CredModal o={o} onClose={() => setAsk(null)} onOk={(a) => { setAcc(a); const t = ask; setAsk(null); run(t.doc, t.dl, a); }} />}
     </div>
   );

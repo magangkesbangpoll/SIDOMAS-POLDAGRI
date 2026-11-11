@@ -17,7 +17,8 @@
     "check-reset": "node server/tools.js check-reset",
     "set-email": "node server/tools.js set-email",
     "backup-now": "node server/tools.js backup-now",
-    "rapikan-drive": "node server/tools.js rapikan-drive"
+    "rapikan-drive": "node server/tools.js rapikan-drive",
+    "organize-drive": "node server/tools.js rapikan-drive"
   },
   "engines": {
     "node": ">=18"

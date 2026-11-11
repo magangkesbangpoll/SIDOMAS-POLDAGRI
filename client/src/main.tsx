@@ -8,7 +8,11 @@ import { AdminShell } from './pages/Admin';
 import { Forgot, Login, Reset } from './pages/AdminAuth';
 import { PortalForgot, PortalHome, PortalLogin, PortalReset } from './pages/Portal';
 import { Dashboard, OrmasPage } from './pages/AdminOrmas';
+import { ExpiredPage, NotifPage } from './pages/Notifikasi';
 import { AdminsPage, CredentialsPage, ExportPage, LogsPage, SettingsPage } from './pages/AdminMore';
+
+// Service worker untuk notifikasi HP admin (hanya jalan di HTTPS atau localhost)
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <BrowserRouter>
@@ -30,6 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="admin" element={<AdminShell />}>
           <Route index element={<Dashboard />} />
           <Route path="ormas" element={<OrmasPage />} />
+          <Route path="kedaluwarsa" element={<ExpiredPage />} />
+          <Route path="notifikasi" element={<NotifPage />} />
           <Route path="password-harian" element={<CredentialsPage />} />
           <Route path="akun" element={<AdminsPage />} />
           <Route path="ekspor" element={<ExportPage />} />

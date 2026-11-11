@@ -57,6 +57,9 @@ if (!db.prepare('pragma table_info(dokumen_ormas)').all().some((c) => c.name ===
 // pending=1: PDF kiriman ormas yang menunggu verifikasi (belum tampil di katalog, belum masuk Google Drive)
 if (!db.prepare('pragma table_info(dokumen_ormas)').all().some((c) => c.name === 'pending')) db.exec('alter table dokumen_ormas add column pending integer not null default 0');
 
+// "Validasi" sekarang berupa pilihan: Terdata / Terdaftar / Teregister. Isian teks lama yang tidak cocok dikosongkan.
+db.exec(`update ormas set validasi=case lower(trim(validasi)) when 'terdata' then 'Terdata' when 'terdaftar' then 'Terdaftar' when 'teregister' then 'Teregister' else '' end where validasi is not null and validasi not in ('','Terdata','Terdaftar','Teregister')`);
+
 // Urutan kategori yang bisa diatur admin
 if (!db.prepare('pragma table_info(kategori)').all().some((c) => c.name === 'urutan')) {
   db.exec('alter table kategori add column urutan integer not null default 0');

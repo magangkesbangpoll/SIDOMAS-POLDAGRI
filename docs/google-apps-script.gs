@@ -4,12 +4,12 @@
 //
 // Struktur folder (dibuat otomatis oleh skrip ini):
 //   DATABASE PDF ORMAS  (PDF_FOLDER_ID)
-//     ├─ Nama Ormas A/    <- semua PDF milik Ormas A
-//     ├─ Nama Ormas B/
+//     ├─ Ormas-001 - Nama Ormas A/ <- semua PDF milik Ormas A
+//     ├─ Ormas-002 - Nama Ormas B/
 //     └─ BACKUP-DATABASE/ <- backup database harian
 //   DATABASE LOGO ORMAS (LOGO_FOLDER_ID)
-//     ├─ Nama Ormas A/    <- logo milik Ormas A
-//     └─ Nama Ormas B/
+//     ├─ Ormas-001 - Nama Ormas A/ <- logo milik Ormas A
+//     └─ Ormas-002 - Nama Ormas B/
 //
 // PENTING saat memperbarui skrip yang sudah pernah dipasang: setelah menempel kode baru, klik
 // Deploy > Manage deployments > ikon pensil > Version: "New version" > Deploy.
@@ -58,6 +58,34 @@ function ormasFolder_(kind, name, create) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Cari folder ormas berdasarkan kode ("Ormas-001 - ..."); ganti nama jika nama ormas berubah; buat jika create = true.
+function kodeFolder_(kind, kode, nm, create) {
+  const root = rootFor_(kind);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const it = root.getFolders();
+    while (it.hasNext()) {
+      const f = it.next();
+      if (f.getName().indexOf(kode + ' - ') === 0) { if (nm && f.getName() !== nm) f.setName(nm); return f; }
+    }
+    return create ? root.createFolder(nm) : null;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function isIn_(file, rootId) {
+  const parents = file.getParents();
+  while (parents.hasNext()) {
+    const p = parents.next();
+    if (p.getId() === rootId) return true;
+    const gp = p.getParents();
+    while (gp.hasNext()) if (gp.next().getId() === rootId) return true;
+  }
+  return false;
 }
 
 function folderFor_(kind, name) {
@@ -150,6 +178,37 @@ function doPost(e) {
       ['pdf', 'logo'].forEach(function (k) {
         const f = ormasFolder_(k, b.name, false);
         if (f && !f.getFiles().hasNext() && !f.getFolders().hasNext()) f.setTrashed(true);
+      });
+      return out_({ ok: true });
+    }
+
+    // Dipakai server SIDOMAS: kumpulkan file (PDF/logo) satu ormas ke folder "Ormas-001 - Nama Ormas".
+    // Folder dicari lewat kode ormas, sehingga ikut berganti nama jika nama ormas berubah.
+    if (b.action === 'organize') {
+      const kode = String(b.kode || '');
+      if (!/^Ormas-\d+$/.test(kode)) return out_({ ok: false, error: 'Kode ormas tidak valid' });
+      const nm = safeName_(kode + ' - ' + b.nama);
+      let moved = 0;
+      (b.ids || []).forEach(function (id) {
+        const file = DriveApp.getFileById(String(id));
+        if (!inAllowed_(file, [PDF_FOLDER_ID, LOGO_FOLDER_ID])) return;
+        const kind = isIn_(file, LOGO_FOLDER_ID) ? 'logo' : 'pdf';
+        const folder = kodeFolder_(kind, kode, nm, true);
+        const parents = file.getParents();
+        if (parents.hasNext() && parents.next().getId() === folder.getId()) return;
+        file.moveTo(folder);
+        moved++;
+      });
+      return out_({ ok: true, moved: moved });
+    }
+
+    // Ormas dihapus: buang folder ormas (beserta isinya) ke Sampah Drive
+    if (b.action === 'delete_folder') {
+      const kode = String(b.kode || '');
+      if (!/^Ormas-\d+$/.test(kode)) return out_({ ok: false, error: 'Kode ormas tidak valid' });
+      ['pdf', 'logo'].forEach(function (k) {
+        const f = kodeFolder_(k, kode, null, false);
+        if (f) f.setTrashed(true);
       });
       return out_({ ok: true });
     }

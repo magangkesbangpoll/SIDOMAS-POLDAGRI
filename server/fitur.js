@@ -71,7 +71,8 @@ async function getWebPush() {
     wp = mod.default || mod;
     let pub = getSetting('vapid_public'), priv = getSetting('vapid_private');
     if (!pub || !priv) { const k = wp.generateVAPIDKeys(); pub = k.publicKey; priv = k.privateKey; setSetting('vapid_public', pub); setSetting('vapid_private', priv); }
-    const subject = process.env.VAPID_SUBJECT || (/^https:\/\//.test(process.env.APP_URL || '') ? process.env.APP_URL : 'mailto:admin@sidomas.local');
+    const mail = [process.env.ADMIN_EMAIL, process.env.SMTP_USER].find((m) => /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(m || '') && !/\.local$/i.test(m));
+    const subject = process.env.VAPID_SUBJECT || (/^https:\/\//.test(process.env.APP_URL || '') ? process.env.APP_URL : `mailto:${mail || 'admin@example.com'}`);
     wp.setVapidDetails(subject, pub, priv);
   } catch (e) { console.error('Notifikasi HP (Web Push) tidak aktif:', e.message); wp = null; }
   return wp;
