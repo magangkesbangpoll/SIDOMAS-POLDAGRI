@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
@@ -184,6 +185,21 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', +process.env.TRUST_PROXY || 
 app.use(helmet({ contentSecurityPolicy: { directives: { ...helmet.contentSecurityPolicy.getDefaultDirectives(), 'frame-src': ["'self'", 'https://www.google.com', 'https://maps.google.com'] } } }));
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
+
+// --- Realtime (Server-Sent Events): beri sinyal ke semua browser tiap ada perubahan data ---
+const liveClients = new Set();
+const liveBroadcast = () => { for (const r of liveClients) r.write(`event: tick\ndata: ${Date.now()}\n\n`); };
+app.get('/api/live', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.flushHeaders(); res.write('retry: 3000\n\n'); liveClients.add(res);
+  req.on('close', () => liveClients.delete(res));
+});
+setInterval(() => { for (const r of liveClients) r.write(': ping\n\n'); }, 25000).unref();
+setInterval(liveBroadcast, 60000).unref(); // perubahan berbasis waktu (kedaluwarsa, password harian)
+app.use('/api', (req, res, next) => {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !/^\/(public|auth)\//.test(req.path)) res.on('finish', () => { if (res.statusCode < 400) liveBroadcast(); });
+  next();
+});
 
 const limiter = (extra = {}) => rateLimit({ windowMs: 15 * 60 * 1000, limit: () => +S('login_max_attempts') || 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Terlalu banyak percobaan. Silakan coba lagi beberapa menit lagi.' }, ...extra });
 const loginLimiter = limiter(), accessLimiter = limiter(), forgotLimiter = limiter({ limit: 5 });
@@ -795,15 +811,39 @@ app.post('/api/admin/credentials/:id/regenerate', auth('manage_credentials'), (r
 });
 
 // --- Ekspor ---
-const csvCell = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
-const sendCsv = (res, name, header, rows) => {
-  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' });
-  res.send('\uFEFF' + [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n'));
+const sendXlsx = async (res, name, header, rows) => {
+  try {
+    const kred = name.startsWith('kredensial');
+    const title = kred ? 'DAFTAR KREDENSIAL HARIAN ORMAS' : 'DATA ORGANISASI KEMASYARAKATAN (ORMAS)';
+    const cols = header.length + 1, A = (n) => ({ style: 'thin', color: { argb: 'FF94A3B8' } });
+    const wb = new ExcelJS.Workbook(); wb.creator = 'SIDOMAS';
+    const ws = wb.addWorksheet(kred ? 'Kredensial' : 'Data Ormas', {
+      views: [{ state: 'frozen', ySplit: 4 }],
+      pageSetup: { paperSize: header.length > 12 ? 8 : 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, printTitlesRow: '4:4', margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
+      headerFooter: { oddFooter: '&LSIDOMAS - Bidang Poldagri&CHalaman &P dari &N&RDicetak &D' },
+    });
+    ws.mergeCells(1, 1, 1, cols); Object.assign(ws.getCell(1, 1), { value: title }); ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: 'FF0B2250' } };
+    ws.mergeCells(2, 1, 2, cols); ws.getCell(2, 1).value = `Bidang Poldagri - Tanggal cetak: ${new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long' })} - Jumlah data: ${rows.length}`; ws.getCell(2, 1).font = { size: 10, color: { argb: 'FF475569' } };
+    const data = [['No', ...header], ...rows.map((r, i) => [i + 1, ...r.map((v) => (v == null ? '' : String(v)))])];
+    data.forEach((r, i) => ws.getRow(4 + i).values = r);
+    ws.getColumn(1).width = 5;
+    header.forEach((h, c) => { const m = Math.max(h.length * 0.9, ...rows.map((r) => String(r[c] ?? '').length)); ws.getColumn(c + 2).width = Math.min(42, Math.max(10, Math.ceil(m) + 2)); });
+    data.forEach((_, i) => { const row = ws.getRow(4 + i); row.eachCell({ includeEmpty: true }, (cell, n) => {
+      cell.border = { top: A(), left: A(), bottom: A(), right: A() };
+      cell.alignment = { vertical: i ? 'top' : 'middle', horizontal: i === 0 || n === 1 ? 'center' : 'left', wrapText: true };
+      if (i === 0) { cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B2250' } }; }
+      else if (i % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    }); });
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: cols } };
+    const buf = await wb.xlsx.writeBuffer();
+    res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' });
+    res.send(Buffer.from(buf));
+  } catch (e) { console.error(e.message); if (!res.headersSent) res.status(500).json({ error: 'Gagal membuat file Excel' }); }
 };
 app.get('/api/admin/export/ormas', auth('export'), (req, res) => {
   const { items } = listOrmas(req.query, { paginate: false });
-  log(req, 'ekspor_csv', null, `Ekspor CSV ${items.length} data ormas`);
-  sendCsv(res, `data-ormas-${today()}.csv`,
+  log(req, 'ekspor_csv', null, `Ekspor Excel ${items.length} data ormas`);
+  sendXlsx(res, `data-ormas-${today()}.xlsx`,
     ['ID Ormas', 'Nama Ormas', 'Bidang (Kategori)', 'Bentuk', 'Bidang Kegiatan', 'Kemantren', 'Alamat Kantor/Sekretariat', 'Nomor Telepon', 'Email Ormas', 'Ketua', 'Sekretaris', 'Bendahara', 'Legal Standing - Jenis', 'Legal Standing - Nomor', 'Legal Standing - Tahun', 'Legal Standing - Berlaku s/d', 'SKTO - Nomor', 'SKTO - Tahun', 'SKTO - Berlaku s/d', 'Status Validasi', 'Jumlah Anggota', 'Anggota Perempuan', 'Anggota Lansia', 'Anggota Disabilitas', 'Link Dokumentasi', 'Instagram', 'Status Dokumen', 'Status Operasional', 'Status Publikasi', 'Dokumen Wajib Terunggah (dari 5)', 'Tanggal Dibuat', 'Tanggal Diperbarui'],
     items.map((o) => [o.kode_ormas, o.nama_ormas, o.nama_kategori, o.bentuk, o.bidang_kegiatan, o.kemantren, o.alamat, o.nomor_whatsapp_ketua, o.email_ormas, o.nama_ketua, o.sekretaris, o.bendahara, o.legal_jenis, o.nomor_sk, o.legal_tahun, o.legal_berlaku_sd, o.skto_nomor, o.skto_tahun, o.skto_berlaku_sd, o.validasi, o.anggota_total, o.anggota_perempuan, o.anggota_lansia, o.anggota_disabilitas, o.link_dokumentasi, o.link_instagram, o.status_dokumen, o.status_operasional, o.status_publikasi, o.jumlah_dok, o.created_at, o.updated_at]));
 });
@@ -812,7 +852,7 @@ app.get('/api/admin/export/credentials', auth('export_credentials'), (req, res) 
   ensureAll();
   const rows = db.prepare(`select o.kode_ormas,o.nama_ormas,c.* from ormas o join kredensial_harian c on c.ormas_id=o.id and c.tanggal_berlaku=? and c.status='aktif' order by o.id`).all(today());
   log(req, 'ekspor_kredensial', null, `Ekspor ${rows.length} kredensial harian`);
-  sendCsv(res, `kredensial-ormas-${today()}.csv`, ['ID Ormas', 'Nama Ormas', 'Username', 'Password', 'Berlaku', 'Kedaluwarsa'], rows.map((r) => [r.kode_ormas, r.nama_ormas, r.username, dec(r.password_enc), r.tanggal_berlaku, r.tanggal_kedaluwarsa]));
+  sendXlsx(res, `kredensial-ormas-${today()}.xlsx`, ['ID Ormas', 'Nama Ormas', 'Username', 'Password', 'Berlaku', 'Kedaluwarsa'], rows.map((r) => [r.kode_ormas, r.nama_ormas, r.username, dec(r.password_enc), r.tanggal_berlaku, r.tanggal_kedaluwarsa]));
 });
 
 // --- Log ---

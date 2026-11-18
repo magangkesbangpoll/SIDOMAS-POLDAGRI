@@ -16,3 +16,14 @@ body { @apply bg-slate-50 text-slate-800 antialiased; }
   .td { @apply px-3 py-2.5 text-sm; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+html { -webkit-text-size-adjust: 100%; }
+img, video, iframe { max-width: 100%; }
+body { padding-bottom: env(safe-area-inset-bottom); overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .inp { font-size: 16px; } /* cegah zoom otomatis di iPhone */
+  .btn { min-height: 2.5rem; }
+  .th, .td { padding-left: .5rem; padding-right: .5rem; }
+  main { padding-left: .75rem; padding-right: .75rem; }
+}
+@media (min-width: 1536px) { main { max-width: 1700px; margin-inline: auto; } }

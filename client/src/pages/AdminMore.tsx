@@ -80,14 +80,14 @@ export function ExportPage() {
     <div className="space-y-4">
       <h1 className="font-serif text-2xl font-bold text-navy-900">Ekspor Data</h1>
       <div className="card space-y-3 p-4">
-        <h2 className="font-semibold">Ekspor data ormas (CSV)</h2><p className="text-sm text-slate-600">Kosongkan semua filter untuk mengekspor seluruh data. File berformat UTF-8 sehingga terbaca benar di Excel. Isi PDF dan password tidak ikut diekspor.</p>
+        <h2 className="font-semibold">Ekspor data ormas (Excel siap cetak)</h2><p className="text-sm text-slate-600">Kosongkan semua filter untuk mengekspor seluruh data. File Excel (.xlsx) sudah rapi: judul, header berwarna, lebar kolom otomatis, garis tabel, dan diatur untuk cetak kertas landscape (A3 untuk data ormas, A4 untuk kredensial). Isi PDF dan password tidak ikut diekspor.</p>
         <div className="grid gap-3 md:grid-cols-4">
           <input className="inp" placeholder="Kata kunci pencarian" aria-label="Pencarian" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="inp" aria-label="Kategori" value={kat} onChange={(e) => setKat(e.target.value)}><option value="">Semua kategori</option>{meta?.categories.map((c: any) => <option key={c.id} value={c.id}>{c.nama_kategori}</option>)}</select>
           <select className="inp" aria-label="Status dokumen" value={sd} onChange={(e) => setSd(e.target.value)}><option value="">Semua status dokumen</option>{DOC_STATUS.map((s) => <option key={s}>{s}</option>)}</select>
           <select className="inp" aria-label="Status operasional" value={so} onChange={(e) => setSo(e.target.value)}><option value="">Semua status operasional</option><option>Aktif</option><option>Tidak Aktif</option></select>
         </div>
-        <a className="btn-p" href={`/api/admin/export/ormas?${qs({ q, kategori_id: kat, status_dokumen: sd, status_operasional: so })}`}><Download size={16} /> Unduh CSV</a>
+        <a className="btn-p" href={`/api/admin/export/ormas?${qs({ q, kategori_id: kat, status_dokumen: sd, status_operasional: so })}`}><Download size={16} /> Unduh Excel</a>
       </div>
       {me.perms.includes('export_credentials') && (
         <div className="card space-y-3 border-orange-300 p-4"><h2 className="flex items-center gap-2 font-semibold text-orange-700"><AlertTriangle size={18} /> Ekspor daftar username dan password harian</h2>

@@ -16,7 +16,7 @@ export function Dashboard() {
   );
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between"><h1 className="font-serif text-2xl font-bold text-navy-900">Dashboard</h1><p className="text-xs text-slate-500">Data terakhir diperbarui: {fmtDate(d.last_update)}</p></div>
+      <div className="flex flex-wrap items-end justify-between gap-2"><h1 className="font-serif text-2xl font-bold text-navy-900">Dashboard</h1><p className="text-xs text-slate-500">Data terakhir diperbarui: {fmtDate(d.last_update)}</p></div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([l, v, c]: any) => <div key={l} className={`card border-l-4 p-4 ${c}`}><p className="text-sm text-slate-600">{l}</p><p className="font-serif text-4xl font-bold text-navy-900">{v}</p></div>)}</div>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-4"><h3 className="mb-2 font-serif font-bold text-navy-900">Ormas per kategori</h3>
@@ -52,7 +52,7 @@ export function OrmasPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><h1 className="font-serif text-2xl font-bold text-navy-900">Data Ormas</h1>
-        <div className="flex gap-2">{can('export') && <a className="btn-o" href={`/api/admin/export/ormas?${qs({ q: dq, kategori_id: kat, status_dokumen: sd })}`}><Download size={16} /> Ekspor CSV</a>}{can('manage_ormas') && <button className="btn-p" onClick={() => setForm({})}><Plus size={16} /> Tambah Ormas</button>}</div></div>
+        <div className="flex flex-wrap gap-2">{can('export') && <a className="btn-o" href={`/api/admin/export/ormas?${qs({ q: dq, kategori_id: kat, status_dokumen: sd })}`}><Download size={16} /> Ekspor Excel</a>}{can('manage_ormas') && <button className="btn-p" onClick={() => setForm({})}><Plus size={16} /> Tambah Ormas</button>}</div></div>
       {exp && (exp.sudah > 0 || exp.segera > 0) && <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><span className="flex items-center gap-2"><TriangleAlert size={18} className="shrink-0" /><span>{exp.sudah > 0 && <b>{exp.sudah} dokumen sudah kedaluwarsa. </b>}{exp.segera > 0 && <>{exp.segera} dokumen akan berakhir dalam 90 hari. </>}Perhatikan label pada kolom Masa Berlaku.</span></span><Link className="font-semibold underline" to="/admin/kedaluwarsa">Lihat daftar</Link></div>}
       <div className="card grid gap-3 p-3 md:grid-cols-4">
         <div className="relative md:col-span-2"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input className="inp pl-9" placeholder="Cari nama, ID, pengurus, atau nomor legal" aria-label="Cari" value={q} onChange={(e) => setQ(e.target.value)} /></div>

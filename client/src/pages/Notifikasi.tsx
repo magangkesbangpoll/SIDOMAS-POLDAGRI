@@ -1,3 +1,4 @@
+import { onLive } from '../live';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Bell, BellRing, CheckCheck, Smartphone } from 'lucide-react';
@@ -60,6 +61,7 @@ export function NotifBell() {
   const loadList = useCallback(() => api('/admin/notifikasi').then((d) => { setItems(d.items); setUnread(d.unread); }).catch(() => {}), []);
   useEffect(() => { loadCount(); const t = setInterval(loadCount, 15000); const v = () => document.visibilityState === 'visible' && loadCount(); document.addEventListener('visibilitychange', v); return () => { clearInterval(t); document.removeEventListener('visibilitychange', v); }; }, [loadCount]);
   useEffect(() => { if (open) loadList(); }, [open, loadList]);
+  useEffect(() => onLive(() => { loadCount(); if (open) loadList(); }), [loadCount, loadList, open]);
   useEffect(() => { const h = (e: MouseEvent) => { if (open && ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, [open]);
   const readAll = async () => { await api('/admin/notifikasi/read-all', { method: 'POST', body: {} }).catch(() => {}); loadList(); };
   const go = async (n: any) => {

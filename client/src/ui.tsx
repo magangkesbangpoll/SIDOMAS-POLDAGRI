@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { CheckCircle2, ChevronLeft, ChevronRight, X, XCircle } from 'lucide-react';
 import { api } from './api';
+import { onLive } from './live';
 
 export const DOC_STATUS = ['Lengkap', 'Belum Lengkap', 'Perlu Diverifikasi', 'Tidak Berlaku', 'Kedaluwarsa'];
 const BADGE: Record<string, string> = {
@@ -60,6 +61,8 @@ export function useFetch<T = any>(path: string | null) {
     api<T>(path).then((d) => !off && setData(d)).catch((e) => !off && setError(e.message)).finally(() => !off && setLoading(false));
     return () => { off = true; };
   }, [path, tick]);
+  // Realtime: segarkan diam-diam (tanpa loading) saat server mengabarkan ada perubahan
+  useEffect(() => { if (!path) return; return onLive(() => { api<T>(path).then((d) => setData((o) => (JSON.stringify(o) === JSON.stringify(d) ? o : d))).catch(() => {}); }); }, [path]);
   return { data, loading, error, reload: () => setTick((t) => t + 1) };
 }
 
