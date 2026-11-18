@@ -20,14 +20,14 @@ db.pragma('foreign_keys = ON');
 export const PERMS = ['view_ormas', 'manage_ormas', 'view_docs', 'view_credentials', 'manage_credentials', 'export', 'export_credentials', 'view_logs', 'manage_admins', 'manage_settings'];
 
 // Hak akses per role. Menu di dashboard admin mengikuti daftar ini (menu tanpa izin otomatis tidak tampil).
-//  - Surveyor                : semua menu dan hak akses
+//  - Super Admin                : semua menu dan hak akses
 //  - Admin Digitalisasi Ormas: tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan
 //  - Kepala Bidang Poldagri  : tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan
 const TANPA_KELOLA = ['manage_admins', 'export_credentials', 'manage_settings'];
 export const ROLE_PERMS = {
   'Admin Digitalisasi Ormas': PERMS.filter((p) => !TANPA_KELOLA.includes(p)),
   'Kepala Bidang Poldagri': PERMS.filter((p) => !TANPA_KELOLA.includes(p)),
-  'Surveyor': [...PERMS],
+  'Super Admin': [...PERMS],
 };
 
 db.exec(`
@@ -44,6 +44,9 @@ create table if not exists akun_ormas(ormas_id integer primary key references or
 create table if not exists reset_tokens_ormas(id integer primary key autoincrement, ormas_id integer not null references ormas(id) on delete cascade, token_hash text unique not null, expires_at text not null, used integer not null default 0);
 -- Perubahan data dari portal ormas yang MENUNGGU verifikasi admin (data katalog tetap memakai tabel ormas sampai diverifikasi)
 create table if not exists perubahan_ormas(ormas_id integer primary key references ormas(id) on delete cascade, data text not null, logo_key text, logo_nama text, remove_logo integer not null default 0, status_sebelumnya text, created_at text not null, updated_at text not null);
+-- Pendaftaran ormas baru dari halaman publik (menunggu tindak lanjut admin; belum masuk tabel ormas/katalog/Google Drive)
+create table if not exists pendaftaran_ormas(id integer primary key autoincrement, nama_ormas text not null, kategori_nama text not null, data text not null, logo_key text, logo_nama text, status text not null default 'tindaklanjuti', catatan text, ormas_id integer, created_at text not null, updated_at text);
+create table if not exists pendaftaran_dokumen(id integer primary key autoincrement, pendaftaran_id integer not null references pendaftaran_ormas(id) on delete cascade, jenis text not null, nama_file text not null, storage_key text not null, ukuran integer);
 -- Notifikasi untuk admin (lonceng). 'kunci' dipakai agar pengingat yang sama tidak dibuat dua kali.
 create table if not exists notifikasi(id integer primary key autoincrement, jenis text not null, judul text not null, pesan text not null, ormas_id integer, kunci text unique, created_at text not null);
 create table if not exists notifikasi_baca(notif_id integer not null references notifikasi(id) on delete cascade, admin_id integer not null references admin(id) on delete cascade, primary key(notif_id, admin_id));
@@ -92,9 +95,9 @@ if (!db.prepare('select 1 from roles limit 1').get()) {
     for (const [nama, perms] of Object.entries(ROLE_PERMS)) ins.run(nama, JSON.stringify(perms));
     for (const k of ['Sosial dan Kemanusiaan', 'Keagamaan', 'Kepemudaan', 'Pendidikan', 'Kebudayaan', 'Lingkungan Hidup', 'Profesi', 'Hukum dan HAM', 'Ekonomi dan Kewirausahaan', 'Lainnya'])
       db.prepare('insert into kategori(nama_kategori,urutan) values(?,(select coalesce(max(urutan),0)+1 from kategori))').run(k);
-    // Akun admin awal (role Surveyor, akses penuh): wajib ganti password saat login pertama.
+    // Akun admin awal (role Super Admin, akses penuh): wajib ganti password saat login pertama.
     // Password awal diambil dari ADMIN_INITIAL_PASSWORD; jika kosong dibuat acak dan dicetak SEKALI di log server.
-    const surveyorId = db.prepare(`select id from roles where nama_role='Surveyor'`).get().id;
+    const surveyorId = db.prepare(`select id from roles where nama_role='Super Admin'`).get().id;
     db.prepare('insert into admin(nama,username,email,password_hash,role_id,must_change,created_at,updated_at) values(?,?,?,?,?,1,?,?)')
       .run('Administrator Awal', 'admin', process.env.ADMIN_EMAIL || 'admin@sidomas.local', bcrypt.hashSync(initialPassword, 10), surveyorId, now(), now());
   })();
@@ -103,20 +106,23 @@ if (!db.prepare('select 1 from roles limit 1').get()) {
   }
 }
 
+// Ganti nama role lama "Surveyor" menjadi "Super Admin" (hak akses TIDAK berubah)
+if (!db.prepare("select 1 from roles where nama_role='Super Admin'").get()) db.prepare("update roles set nama_role='Super Admin' where nama_role='Surveyor'").run();
+
 // ---- Migrasi role v2 (berjalan sekali pada database lama) ----
-// - Menambah role Surveyor (akses penuh).
+// - Menambah role Super Admin (akses penuh).
 // - Mengurangi hak role Admin Digitalisasi Ormas: tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan.
 // - Agar tidak ada yang terkunci dari Manajemen Admin: jika setelah perubahan tidak ada akun aktif yang
-//   memegang hak manage_admins, akun aktif tertua dijadikan Surveyor.
+//   memegang hak manage_admins, akun aktif tertua dijadikan Super Admin.
 if (getSetting('roles_v2') !== 'done') {
   db.transaction(() => {
     const up = db.prepare('insert into roles(nama_role,permissions) values(?,?) on conflict(nama_role) do update set permissions=excluded.permissions');
     up.run('Admin Digitalisasi Ormas', JSON.stringify(ROLE_PERMS['Admin Digitalisasi Ormas']));
-    up.run('Surveyor', JSON.stringify(ROLE_PERMS['Surveyor']));
+    up.run('Super Admin', JSON.stringify(ROLE_PERMS['Super Admin']));
     const aktif = db.prepare(`select a.id,r.permissions from admin a join roles r on r.id=a.role_id where a.status_akun='aktif' order by a.id`).all();
     if (aktif.length && !aktif.some((a) => JSON.parse(a.permissions).includes('manage_admins'))) {
-      db.prepare(`update admin set role_id=(select id from roles where nama_role='Surveyor'),updated_at=? where id=?`).run(now(), aktif[0].id);
-      console.log('Migrasi role: akun aktif tertua dijadikan Surveyor agar Manajemen Admin tetap bisa diakses.');
+      db.prepare(`update admin set role_id=(select id from roles where nama_role='Super Admin'),updated_at=? where id=?`).run(now(), aktif[0].id);
+      console.log('Migrasi role: akun aktif tertua dijadikan Super Admin agar Manajemen Admin tetap bisa diakses.');
     }
     setSetting('roles_v2', 'done');
   })();

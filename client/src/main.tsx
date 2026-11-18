@@ -8,6 +8,8 @@ import { AdminShell } from './pages/Admin';
 import { Forgot, Login, Reset } from './pages/AdminAuth';
 import { PortalForgot, PortalHome, PortalLogin, PortalReset } from './pages/Portal';
 import { Dashboard, OrmasPage } from './pages/AdminOrmas';
+import { Daftar } from './pages/Daftar';
+import { PendaftaranPage } from './pages/AdminPendaftaran';
 import { ExpiredPage, NotifPage } from './pages/Notifikasi';
 import { AdminsPage, CredentialsPage, ExportPage, LogsPage, SettingsPage } from './pages/AdminMore';
 
@@ -22,6 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route index element={<Home />} />
           <Route path="katalog" element={<Catalog />} />
           <Route path="tentang" element={<About />} />
+          <Route path="daftar" element={<Daftar />} />
           <Route path="ormas/:kode" element={<OrmasPublic />} />
         </Route>
         <Route path="ormas-login" element={<PortalLogin />} />
@@ -34,6 +37,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="admin" element={<AdminShell />}>
           <Route index element={<Dashboard />} />
           <Route path="ormas" element={<OrmasPage />} />
+          <Route path="pendaftaran" element={<PendaftaranPage />} />
           <Route path="kedaluwarsa" element={<ExpiredPage />} />
           <Route path="notifikasi" element={<NotifPage />} />
           <Route path="password-harian" element={<CredentialsPage />} />

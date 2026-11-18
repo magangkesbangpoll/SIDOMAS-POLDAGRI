@@ -22,6 +22,7 @@ export function PublicLayout() {
           <nav className="flex flex-wrap items-center gap-1">
             <NavLink to="/" end className={act}>Beranda</NavLink>
             <NavLink to="/katalog" className={act}>Katalog Ormas</NavLink>
+            <NavLink to="/daftar" className={act}>Daftar Ormas Baru</NavLink>
             <NavLink to="/tentang" className={act}>Tentang Sistem</NavLink>
             <NavLink to="/ormas-login" className={act}>Login Ormas</NavLink>
             <Link to="/admin/login" className="btn-g ml-1">Login Admin</Link>
@@ -46,7 +47,7 @@ export function Home() {
           <div className="md:col-span-3">
             <h1 className="font-serif text-3xl font-bold leading-tight md:text-4xl">Data organisasi kemasyarakatan, tertata dan mudah ditelusuri.</h1>
             <p className="mt-4 max-w-xl text-navy-100">Telusuri katalog ormas yang dikelola Bidang Poldagri. Dokumen pendukung dilindungi dan hanya dapat dibuka dengan username dan password harian dari admin.</p>
-            <div className="mt-6 flex flex-wrap gap-3"><Link to="/katalog" className="btn-g">Buka Katalog Ormas</Link><Link to="/tentang" className="btn bg-navy-700 text-white hover:bg-navy-600">Cara mengakses dokumen</Link></div>
+            <div className="mt-6 flex flex-wrap gap-3"><Link to="/katalog" className="btn-g">Buka Katalog Ormas</Link><Link to="/daftar" className="btn bg-white text-navy-900 hover:bg-slate-100">Daftar Ormas Baru</Link><Link to="/tentang" className="btn bg-navy-700 text-white hover:bg-navy-600">Cara mengakses dokumen</Link></div>
           </div>
           <div className="rounded-lg border border-navy-600 bg-navy-900 p-6 md:col-span-2">
             <p className="text-sm text-navy-100">Ormas tampil di katalog</p>

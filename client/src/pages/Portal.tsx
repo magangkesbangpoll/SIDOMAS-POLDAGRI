@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Building2, ExternalLink, KeyRound, LogOut, Save } from 'lucide-react';
+import { Building2, ExternalLink, KeyRound, LogOut, Save, Upload } from 'lucide-react';
 import { api } from '../api';
 import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, DOKUMENTASI, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
 import { ChangePassword, PasswordInput, Shell } from './AdminAuth';
@@ -72,6 +72,12 @@ export function PortalHome() {
     if (!x) return; if (x.type !== 'application/pdf') return toast(`"${x.name}" bukan PDF`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
     setFiles((p) => ({ ...p, [j]: x }));
   };
+  const uploadLaporan = async () => {
+    if (busy || !files.dokumentasi) return; setBusy(true);
+    const fd = new FormData(); KEYS.forEach((k) => fd.append(k, String(f[k] ?? ''))); fd.append('dokumentasi', files.dokumentasi);
+    try { await api('/portal/profile', { method: 'PUT', form: fd }); toast('Laporan kegiatan tahunan terkirim dan menunggu verifikasi admin.'); setFiles((p) => { const n = { ...p }; delete n.dokumentasi; return n; }); await load(); }
+    catch (x: any) { toast(x.message, false); } finally { setBusy(false); }
+  };
   const logout = async () => { await api('/portal/logout', { method: 'POST', body: {} }).catch(() => {}); nav('/ormas-login'); };
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); if (busy) return;
@@ -98,6 +104,16 @@ export function PortalHome() {
         {!me.pending && me.catatan_penolakan && <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>Perubahan terakhir Anda ditolak admin.</b> {me.catatan_penolakan}</p>}
         <p className="rounded bg-amber-50 p-3 text-sm text-slate-700">Anda hanya dapat mengubah data ormas Anda sendiri. Setiap kali Anda menyimpan perubahan, status dokumen otomatis menjadi <b>Perlu Diverifikasi</b>, dan data baru tampil di katalog setelah admin memverifikasinya. Nama ormas, kategori, dan status hanya dapat diubah admin.</p>
         <form onSubmit={save} className="card grid gap-4 p-4 md:grid-cols-2">
+          {H('Unggah Laporan Kegiatan Tahunan')}
+          {(() => { const j = 'dokumentasi'; const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
+            <div className={`rounded-md border p-3 md:col-span-2 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
+              <label className="lbl" htmlFor="f_dok">Laporan kegiatan tahunan (PDF, maks. {maxMb} MB)</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input id="f_dok" type="file" accept="application/pdf" className="min-w-0 flex-1 text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
+                <button type="button" className="btn-p" disabled={busy || !files[j]} onClick={uploadLaporan}><Upload size={16} /> {busy ? 'Mengunggah…' : 'Upload'}</button>
+              </div>
+              <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Siap diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}). Klik <b>Upload</b>.</> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}). Mengunggah lagi akan menggantikan laporan ini.</> : 'Belum ada laporan. Berkas masuk ke folder Google Drive ormas Anda setelah diverifikasi admin.'}</p>
+            </div>); })()}
           {H('Identitas')}
           {T('bentuk', 'Bentuk', { ph: 'Mis. Perkumpulan, Yayasan' })}
           <div><label className="lbl" htmlFor="km">Kemantren</label><select id="km" className="inp" value={f.kemantren ?? ''} onChange={(e) => set('kemantren', e.target.value)}><option value="">Pilih kemantren</option>{KEMANTREN.map((k) => <option key={k}>{k}</option>)}</select></div>
@@ -124,15 +140,9 @@ export function PortalHome() {
                 {cur && <button type="button" className="mt-1 text-xs font-semibold text-navy-700 underline" onClick={() => setView(view?.id === cur.id ? null : cur)}><ExternalLink size={12} className="mr-1 inline" />{view?.id === cur.id ? 'Tutup PDF' : 'Lihat PDF tersimpan'}</button>}
               </div>); })}
           </div>
-          {H('Dokumentasi Kegiatan dan Media Sosial (opsional)')}
+          {H('Tautan Dokumentasi dan Media Sosial (opsional)')}
           <LinkInputs f={f} set={set} />
-          {(() => { const [j, l] = DOKUMENTASI; const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
-            <div className={`rounded-md border p-3 md:col-span-2 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
-              <label className="lbl" htmlFor="f_dok">Unggah {l} (PDF)</label>
-              <input id="f_dok" type="file" accept="application/pdf" className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
-              <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}){cur.pending ? ' · menunggu verifikasi admin' : ''}. Pilih file baru untuk mengganti.</> : 'Tidak wajib. Kumpulkan foto kegiatan menjadi satu PDF, atau cukup pakai link di atas.'}</p>
-              {cur && <button type="button" className="mt-1 text-xs font-semibold text-navy-700 underline" onClick={() => setView(view?.id === cur.id ? null : cur)}><ExternalLink size={12} className="mr-1 inline" />{view?.id === cur.id ? 'Tutup PDF' : 'Lihat PDF tersimpan'}</button>}
-            </div>); })()}
+
           {view && <iframe title={view.nama_file} src={`/api/portal/files/${view.id}`} className="h-[60vh] w-full rounded border border-slate-300 md:col-span-2" />}
           <div className="flex justify-end md:col-span-2"><button className="btn-p" disabled={busy}><Save size={16} /> {busy ? 'Menyimpan…' : 'Simpan perubahan'}</button></div>
         </form>

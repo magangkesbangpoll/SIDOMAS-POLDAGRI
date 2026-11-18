@@ -34,8 +34,8 @@ process.on('unhandledRejection', (e) => console.error('Kesalahan latar belakang 
 const PORT = +process.env.PORT || 3001;
 const now = () => new Date().toISOString();
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
-// Lima dokumen wajib + dokumentasi kegiatan (opsional)
-const DOC_TYPES = { sk_pengurusan: 'SK Pengurusan', surat_domisili: 'Surat Keterangan Domisili', program_kerja: 'Program Kerja', badan_hukum: 'Salinan Badan Hukum', skto: 'SKTO', dokumentasi: 'Dokumentasi Kegiatan' };
+// Lima dokumen wajib + laporan kegiatan tahunan (opsional; kunci internal tetap 'dokumentasi')
+const DOC_TYPES = { sk_pengurusan: 'SK Pengurusan', surat_domisili: 'Surat Keterangan Domisili', program_kerja: 'Program Kerja', badan_hukum: 'Salinan Badan Hukum', skto: 'SKTO', dokumentasi: 'Laporan Kegiatan Tahunan' };
 const REQ_DOCS = Object.keys(DOC_TYPES).filter((k) => k !== 'dokumentasi');
 const VALIDASI = ['Terdata', 'Terdaftar', 'Teregister'];
 const INT_FIELDS = ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas', 'anggota_total'];
@@ -559,7 +559,7 @@ app.get('/api/admin/dashboard', auth('view_ormas'), (req, res) => {
   const base = `from ormas o join kategori k on k.id=o.kategori_id`;
   const dk = dokKedaluwarsa();
   res.json({
-    stats: { terdaftar: c(), aktif: c(`status_operasional='Aktif'`), belum_lengkap: c(`status_dokumen='Belum Lengkap'`), perlu_verifikasi: c(`status_dokumen='Perlu Diverifikasi'`), kedaluwarsa: c(`status_dokumen='Kedaluwarsa'`) },
+    stats: { pendaftaran_baru: pendCount(), terdaftar: c(), aktif: c(`status_operasional='Aktif'`), belum_lengkap: c(`status_dokumen='Belum Lengkap'`), perlu_verifikasi: c(`status_dokumen='Perlu Diverifikasi'`), kedaluwarsa: c(`status_dokumen='Kedaluwarsa'`) },
     by_kategori: db.prepare(`select k.nama_kategori name, count(o.id) value from kategori k left join ormas o on o.kategori_id=k.id group by k.id having count(o.id)>0 order by value desc`).all(),
     by_status: DOC_ST.map((s) => ({ name: s, value: c(`status_dokumen='${s}'`) })),
     terbaru: db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.status_dokumen,o.created_at,k.nama_kategori ${base} order by o.id desc limit 5`).all(),
@@ -685,6 +685,117 @@ app.post('/api/admin/ormas/:id/portal-reset', auth('manage_ormas'), (req, res) =
   log(req, 'reset_akun_ormas', o.id, `Admin membuat/mengatur ulang password portal ${o.kode_ormas}`);
   notifAdmin(req, `Mengatur ulang password portal ${o.kode_ormas}`, o.id);
   res.json(portal);
+});
+
+// ---------- Pendaftaran ormas baru (halaman publik -> tindak lanjut admin) ----------
+// Berkas dan data disimpan sementara (data/pending + tabel pendaftaran_ormas). Baru setelah admin MENYETUJUI:
+// ormas dibuat, PDF + logo masuk Google Drive ke folder "Ormas-XXX - Nama Ormas", dan data tampil di katalog.
+const daftarLimiter = limiter({ limit: 5 });
+app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
+  const kid = db.prepare('select id from kategori order by urutan,id').get()?.id;
+  const b = { ...req.body, kategori_id: kid };
+  const logo = req.files?.logo?.[0], docs = uploadedDocs(req).filter(([j]) => j !== 'skto'); // pendaftar tidak mengunggah SKTO
+  const kat = String(b.kategori_nama || '').trim().replace(/\s+/g, ' ');
+  const err = !kid ? 'Sistem belum siap menerima pendaftaran' : !kat || kat.length > 100 ? 'Kategori wajib diisi (maks. 100 karakter)'
+    : validateOrmas(b) || (!String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
+  if (err) return fail(req, res, err);
+  const nama = String(b.nama_ormas).trim();
+  if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjuti'`).get(nama, nama))
+    return fail(req, res, 'Ormas dengan nama ini sudah terdaftar atau sedang diproses', 409);
+  const { kategori_id, status_dokumen, status_operasional, status_publikasi, ...data } = rowOf(b, {});
+  const t = now();
+  db.transaction(() => {
+    const pid = db.prepare('insert into pendaftaran_ormas(nama_ormas,kategori_nama,data,logo_key,logo_nama,created_at,updated_at) values(?,?,?,?,?,?,?)')
+      .run(nama, kat, JSON.stringify(data), logo?.filename || null, logo ? cleanName(logo.originalname) : null, t, t).lastInsertRowid;
+    docs.forEach(([j, f]) => db.prepare('insert into pendaftaran_dokumen(pendaftaran_id,jenis,nama_file,storage_key,ukuran) values(?,?,?,?,?)').run(pid, j, cleanName(f.originalname), f.filename, f.size));
+  })();
+  (req.files?.skto || []).forEach((f) => fs.rm(f.path, { force: true }, () => {}));
+  notify({ jenis: 'admin', judul: `Pendaftaran ormas baru: ${nama}`, pesan: 'Ada ormas baru yang mendaftar. TINDAK LANJUTI!' });
+  liveBroadcast(); // rute /public tidak memicu sinyal otomatis
+  res.json({ ok: true });
+});
+
+const pendCount = () => db.prepare(`select count(*) c from pendaftaran_ormas where status='tindaklanjuti'`).get().c;
+app.get('/api/admin/pendaftaran/count', auth('view_ormas'), (req, res) => res.json({ count: pendCount() }));
+app.get('/api/admin/pendaftaran', auth('view_ormas'), (req, res) => {
+  const rows = db.prepare(`select * from pendaftaran_ormas where status in ('tindaklanjuti','ditolak') order by (status='tindaklanjuti') desc, id desc limit 100`).all();
+  res.json(rows.map((p) => ({ ...p, data: JSON.parse(p.data), has_logo: !!p.logo_key, docs: db.prepare('select id,jenis,nama_file,ukuran from pendaftaran_dokumen where pendaftaran_id=?').all(p.id) })));
+});
+const sendPend = (res, file, mime) => {
+  if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'Berkas tidak ditemukan' });
+  res.set({ 'Content-Type': mime, 'Content-Disposition': 'inline', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' }); res.sendFile(file);
+};
+app.get('/api/admin/pendaftaran/:id/dok/:did', auth('view_docs'), (req, res) => {
+  const d = db.prepare('select * from pendaftaran_dokumen where id=? and pendaftaran_id=?').get(+req.params.did, +req.params.id);
+  sendPend(res, d && path.join(PENDING, path.basename(d.storage_key)), 'application/pdf');
+});
+app.get('/api/admin/pendaftaran/:id/logo', auth('view_ormas'), (req, res) => {
+  const p = db.prepare('select logo_key from pendaftaran_ormas where id=?').get(+req.params.id);
+  const f = p?.logo_key && path.join(PENDING, path.basename(p.logo_key));
+  sendPend(res, f, f && fs.existsSync(f) ? sniffImg(f) : 'image/png');
+});
+
+app.post('/api/admin/pendaftaran/:id/approve', auth('manage_ormas'), async (req, res) => {
+  const p = db.prepare(`select * from pendaftaran_ormas where id=? and status='tindaklanjuti'`).get(+req.params.id);
+  if (!p) return res.status(404).json({ error: 'Pendaftaran tidak ditemukan atau sudah diproses' });
+  const kn = String(req.body?.kategori_nama || p.kategori_nama).trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!kn) return res.status(400).json({ error: 'Kategori wajib diisi' });
+  const pdocs = db.prepare('select * from pendaftaran_dokumen where pendaftaran_id=?').all(p.id);
+  const uploaded = [], moved = [], keys = new Map(); let logoKey = null;
+  const undo = () => { uploaded.forEach((g) => driveDelete(g)); moved.forEach(([dst, src]) => { try { fs.renameSync(dst, src); } catch {} }); };
+  try {
+    for (const d of pdocs) {
+      const src = path.join(PENDING, path.basename(d.storage_key));
+      if (!fs.existsSync(src)) throw new Error(`Berkas "${d.nama_file}" tidak ditemukan di penyimpanan sementara`);
+      if (driveOn()) { const g = await driveUpload(src, `${DOC_TYPES[d.jenis] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: 'application/pdf' }); uploaded.push(g); keys.set(d.id, 'gd:' + g); }
+      else { const dst = path.join(FILES, path.basename(d.storage_key)); fs.renameSync(src, dst); moved.push([dst, src]); keys.set(d.id, d.storage_key); }
+    }
+    if (p.logo_key) {
+      const src = path.join(PENDING, path.basename(p.logo_key));
+      if (!fs.existsSync(src)) throw new Error('Logo tidak ditemukan di penyimpanan sementara');
+      if (driveOn()) { const g = await driveUpload(src, `Logo - ${p.logo_nama || 'logo'}`, { kind: 'logo', mime: sniffImg(src) }); uploaded.push(g); logoKey = 'gd:' + g; }
+      else { const dst = path.join(LOGOS, path.basename(p.logo_key)); fs.renameSync(src, dst); moved.push([dst, src]); logoKey = p.logo_key; }
+    }
+  } catch (e) { undo(); console.error('Gagal memproses berkas pendaftaran:', e.message); return res.status(502).json({ error: `Berkas gagal dipindahkan: ${e.message}` }); }
+  let r;
+  try {
+    r = db.transaction(() => {
+      let kat = db.prepare('select id from kategori where lower(nama_kategori)=lower(?)').get(kn);
+      if (!kat) kat = { id: db.prepare('insert into kategori(nama_kategori,status_aktif,urutan) values(?,1,?)').run(kn, db.prepare('select coalesce(max(urutan),0)+1 n from kategori').get().n).lastInsertRowid };
+      const row = rowOf({ ...JSON.parse(p.data), nama_ormas: p.nama_ormas, kategori_id: kat.id }, {});
+      row.status_publikasi = 'Publik'; // tampil di katalog setelah disetujui
+      row.status_dokumen = pdocs.filter((d) => d.jenis !== 'dokumentasi').length >= REQ_DOCS.length ? 'Lengkap' : 'Belum Lengkap';
+      const cols = Object.keys(row);
+      const seq = +S('ormas_seq') + 1; setSetting('ormas_seq', seq);
+      const kode = 'Ormas-' + String(seq).padStart(3, '0');
+      const id = db.prepare(`insert into ormas(kode_ormas,logo_key,${cols.join(',')},created_at,updated_at,created_by,updated_by) values(?,?,${cols.map(() => '?').join(',')},?,?,?,?)`)
+        .run(kode, logoKey, ...cols.map((c) => row[c]), now(), now(), req.admin.id, req.admin.id).lastInsertRowid;
+      pdocs.forEach((d) => db.prepare('insert into dokumen_ormas(ormas_id,jenis_dokumen,nama_file,storage_key,mime_type,ukuran_file,uploaded_at,uploaded_by,klasifikasi_akses,pending) values(?,?,?,?,?,?,?,?,?,0)')
+        .run(id, d.jenis, d.nama_file, keys.get(d.id), 'application/pdf', d.ukuran, now(), req.admin.id, 'kredensial'));
+      db.prepare(`update pendaftaran_ormas set status='disetujui',ormas_id=?,kategori_nama=?,updated_at=? where id=?`).run(id, kn, now(), p.id);
+      return { id, kode };
+    }).immediate();
+  } catch (e) { undo(); console.error('Gagal menyetujui pendaftaran:', e.message); return res.status(500).json({ error: 'Pendaftaran gagal disetujui. Tidak ada data yang berubah.' }); }
+  if (driveOn()) { pdocs.forEach((d) => unlink(PENDING, d.storage_key)); unlink(PENDING, p.logo_key); }
+  makeCred(r.id);
+  organizeOrmas(r.id); // membuat folder "Ormas-XXX - Nama" di Drive dan memindahkan PDF + logo ke dalamnya
+  const portal = newPortalAccount(r.id, r.kode); // ditampilkan sekali kepada admin untuk diberikan ke ormas
+  log(req, 'setujui_pendaftaran', r.id, `Menyetujui pendaftaran ${r.kode}: ${p.nama_ormas}`);
+  notifAdmin(req, `Menyetujui pendaftaran ormas baru ${r.kode} (${p.nama_ormas})`, r.id);
+  res.json({ ...r, portal });
+});
+
+app.post('/api/admin/pendaftaran/:id/reject', auth('manage_ormas'), (req, res) => {
+  const p = db.prepare(`select * from pendaftaran_ormas where id=? and status='tindaklanjuti'`).get(+req.params.id);
+  if (!p) return res.status(404).json({ error: 'Pendaftaran tidak ditemukan atau sudah diproses' });
+  db.prepare('select storage_key from pendaftaran_dokumen where pendaftaran_id=?').all(p.id).forEach((d) => unlink(PENDING, d.storage_key));
+  unlink(PENDING, p.logo_key);
+  db.transaction(() => {
+    db.prepare('delete from pendaftaran_dokumen where pendaftaran_id=?').run(p.id);
+    db.prepare(`update pendaftaran_ormas set status='ditolak',logo_key=null,catatan=?,updated_at=? where id=?`).run(String(req.body?.catatan || '').trim().slice(0, 500), now(), p.id);
+  })();
+  log(req, 'tolak_pendaftaran', null, `Menolak pendaftaran ormas baru: ${p.nama_ormas}`);
+  res.json({ ok: true });
 });
 
 // --- Verifikasi perubahan dari portal ormas ---

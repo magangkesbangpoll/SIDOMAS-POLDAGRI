@@ -108,7 +108,7 @@ export const KEMANTREN = ['Danurejan', 'Gedongtengen', 'Gondokusuman', 'Gondoman
 
 // ---------- Tambahan: status validasi, dokumentasi, masa berlaku, Instagram ----------
 export const VALIDASI = ['Terdata', 'Terdaftar', 'Teregister'];
-export const DOKUMENTASI: [string, string] = ['dokumentasi', 'Dokumentasi Kegiatan (opsional)'];
+export const DOKUMENTASI: [string, string] = ['dokumentasi', 'Laporan Kegiatan Tahunan'];
 export const ANGGOTA_KEYS = ['anggota_total', 'anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'];
 // Rincian anggota: hanya bagian yang terisi, mis. "50 perempuan · 10 lansia"
 export const rincian = (o: any, short = false) => [['anggota_perempuan', 'perempuan', 'P'], ['anggota_lansia', 'lansia', 'L'], ['anggota_disabilitas', 'disabilitas', 'D']].filter(([k]) => o[k] != null && o[k] !== '').map(([k, l, s]) => (short ? `${s} ${nf(o[k])}` : `${nf(o[k])} ${l}`)).join(' · ');

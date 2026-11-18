@@ -10,7 +10,7 @@ export function Dashboard() {
   const { data: d, loading, error, reload } = useFetch<any>('/admin/dashboard');
   if (error) return <ErrorBox text={error} retry={reload} />;
   if (loading || !d) return <Skeleton rows={8} />;
-  const cards = [['Ormas Terdaftar', d.stats.terdaftar, 'border-navy-700'], ['Ormas Aktif', d.stats.aktif, 'border-green-600'], ['Belum Melengkapi Dokumen', d.stats.belum_lengkap, 'border-orange-500'], ['Perlu Diverifikasi', d.stats.perlu_verifikasi, 'border-blue-600'], ['Dokumen Sudah Kedaluwarsa', d.dok_kedaluwarsa.sudah, 'border-red-600'], ['Dokumen Segera Berakhir (90 hari)', d.dok_kedaluwarsa.segera, 'border-amber-500']];
+  const cards = [['Pendaftaran Baru (Tindak Lanjuti)', d.stats.pendaftaran_baru, 'border-red-500'], ['Ormas Terdaftar', d.stats.terdaftar, 'border-navy-700'], ['Ormas Aktif', d.stats.aktif, 'border-green-600'], ['Belum Melengkapi Dokumen', d.stats.belum_lengkap, 'border-orange-500'], ['Perlu Diverifikasi', d.stats.perlu_verifikasi, 'border-blue-600'], ['Dokumen Sudah Kedaluwarsa', d.dok_kedaluwarsa.sudah, 'border-red-600'], ['Dokumen Segera Berakhir (90 hari)', d.dok_kedaluwarsa.segera, 'border-amber-500']];
   const List = ({ title, rows, empty }: any) => (
     <div className="card p-4"><h3 className="mb-2 font-serif font-bold text-navy-900">{title}</h3>{rows.length ? <ul className="divide-y divide-slate-100 text-sm">{rows.map((r: any) => <li key={r.id} className="flex justify-between gap-2 py-2"><span><b>{r.kode_ormas}</b> {r.nama_ormas}</span>{r.status_dokumen && <Badge s={r.status_dokumen} />}</li>)}</ul> : <p className="text-sm text-slate-500">{empty}</p>}</div>
   );

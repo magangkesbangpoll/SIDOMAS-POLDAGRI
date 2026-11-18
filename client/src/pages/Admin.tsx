@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Bell, Building2, CalendarClock, FileDown, KeyRound, LayoutDashboard, LogOut, Menu, ScrollText, Settings, Users } from 'lucide-react';
+import { Bell, Building2, CalendarClock, FileDown, KeyRound, LayoutDashboard, LogOut, Menu, UserPlus, ScrollText, Settings, Users } from 'lucide-react';
 import { api } from '../api';
+import { useFetch } from '../ui';
 import { ChangePassword } from './AdminAuth';
 import { NotifBell } from './Notifikasi';
 
 const Ctx = createContext<any>(null);
 export const useAuth = () => useContext(Ctx);
 const MENU: [string, string, any, string | null][] = [
-  ['/admin', 'Dashboard', LayoutDashboard, null], ['/admin/ormas', 'Data Ormas', Building2, 'view_ormas'], ['/admin/kedaluwarsa', 'Dokumen Kedaluwarsa', CalendarClock, 'view_ormas'], ['/admin/notifikasi', 'Notifikasi', Bell, null], ['/admin/password-harian', 'Password Harian', KeyRound, 'view_credentials'],
+  ['/admin', 'Dashboard', LayoutDashboard, null], ['/admin/ormas', 'Data Ormas', Building2, 'view_ormas'], ['/admin/pendaftaran', 'Pendaftaran Baru', UserPlus, 'view_ormas'], ['/admin/kedaluwarsa', 'Dokumen Kedaluwarsa', CalendarClock, 'view_ormas'], ['/admin/notifikasi', 'Notifikasi', Bell, null], ['/admin/password-harian', 'Password Harian', KeyRound, 'view_credentials'],
   ['/admin/akun', 'Manajemen Admin', Users, 'manage_admins'], ['/admin/ekspor', 'Ekspor Data', FileDown, 'export'], ['/admin/log', 'Log Aktivitas', ScrollText, 'view_logs'], ['/admin/pengaturan', 'Pengaturan', Settings, 'manage_settings'],
 ];
 
@@ -16,10 +17,11 @@ export function AdminShell() {
   const nav = useNavigate(); const [me, setMe] = useState<any>(null); const [collapsed, setCollapsed] = useState(false); const [open, setOpen] = useState(false);
   const load = () => api('/admin/me').then(setMe).catch(() => nav('/admin/login', { replace: true }));
   useEffect(() => { load(); }, []);
+  const { data: pc } = useFetch<any>('/admin/pendaftaran/count'); // realtime: jumlah pendaftaran baru
   if (!me) return <div className="grid min-h-screen place-items-center text-slate-500">Memuat…</div>;
   if (me.must_change) return <ChangePassword onDone={load} askEmail={String(me.email).endsWith('@sidomas.local')} />;
   const logout = async () => { await api('/auth/logout', { method: 'POST', body: {} }).catch(() => {}); nav('/admin/login'); };
-  const items = MENU.filter(([, , , perm]) => !perm || me.perms.includes(perm));
+  const items = MENU.filter(([, , , perm]) => !perm || me.perms.includes(perm)).map(([to, l, I, p]) => [to, to === '/admin/pendaftaran' && pc?.count ? `${l} (${pc.count})` : l, I, p] as [string, string, any, string | null]);
   const link = ({ isActive }: any) => `flex items-center gap-3 rounded px-3 py-2 text-sm font-semibold ${isActive ? 'bg-gold-500 text-navy-900' : 'text-navy-100 hover:bg-navy-700'}`;
   return (
     <Ctx.Provider value={me}>
