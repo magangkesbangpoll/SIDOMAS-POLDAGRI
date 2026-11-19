@@ -109,6 +109,10 @@ export const KEMANTREN = ['Danurejan', 'Gedongtengen', 'Gondokusuman', 'Gondoman
 // ---------- Tambahan: status validasi, dokumentasi, masa berlaku, Instagram ----------
 export const VALIDASI = ['Terdata', 'Terdaftar', 'Teregister'];
 export const DOKUMENTASI: [string, string] = ['dokumentasi', 'Laporan Kegiatan Tahunan'];
+export const ADART: [string, string] = ['adart', 'AD/ART'];
+export const COMPANY_PROFILE: [string, string] = ['company_profile', 'Company Profile'];
+export const docAccept = (j: string) => (j === 'company_profile' ? '.pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation' : 'application/pdf');
+export const docTypeOk = (j: string, x: File) => (j === 'company_profile' ? /\.(pdf|pptx?)$/i.test(x.name) : x.type === 'application/pdf');
 export const ANGGOTA_KEYS = ['anggota_total', 'anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'];
 // Rincian anggota: hanya bagian yang terisi, mis. "50 perempuan · 10 lansia"
 export const rincian = (o: any, short = false) => [['anggota_perempuan', 'perempuan', 'P'], ['anggota_lansia', 'lansia', 'L'], ['anggota_disabilitas', 'disabilitas', 'D']].filter(([k]) => o[k] != null && o[k] !== '').map(([k, l, s]) => (short ? `${s} ${nf(o[k])}` : `${nf(o[k])} ${l}`)).join(' · ');
@@ -174,6 +178,10 @@ export function LinkInputs({ f, set }: { f: any; set: (k: string, v: any) => voi
         <input id="link_dokumentasi" type="url" className="inp" maxLength={500} placeholder="https://drive.google.com/..." value={f.link_dokumentasi ?? ''} onChange={(e) => set('link_dokumentasi', e.target.value)} /></div>
       <div className="md:col-span-2"><label className="lbl" htmlFor="link_instagram"><InstagramIcon size={14} className="mr-1 inline text-pink-600" />Instagram ormas (opsional) <span className="font-normal text-slate-500">tautan atau @username</span></label>
         <input id="link_instagram" className="inp" maxLength={200} placeholder="@namaormas atau https://instagram.com/namaormas" value={f.link_instagram ?? ''} onChange={(e) => set('link_instagram', e.target.value)} /></div>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_youtube">Link YouTube ormas (opsional)</label>
+        <input id="link_youtube" type="url" className="inp" maxLength={200} placeholder="https://youtube.com/@namaormas" value={f.link_youtube ?? ''} onChange={(e) => set('link_youtube', e.target.value)} /></div>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_tiktok">Link TikTok ormas (opsional)</label>
+        <input id="link_tiktok" type="url" className="inp" maxLength={200} placeholder="https://tiktok.com/@namaormas" value={f.link_tiktok ?? ''} onChange={(e) => set('link_tiktok', e.target.value)} /></div>
     </>
   );
 }
