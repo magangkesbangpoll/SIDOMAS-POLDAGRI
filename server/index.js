@@ -35,8 +35,13 @@ const PORT = +process.env.PORT || 3001;
 const now = () => new Date().toISOString();
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
 // Lima dokumen wajib + laporan kegiatan tahunan (opsional; kunci internal tetap 'dokumentasi')
-const DOC_TYPES = { sk_pengurusan: 'SK Pengurusan', surat_domisili: 'Surat Keterangan Domisili', program_kerja: 'Program Kerja', badan_hukum: 'Salinan Badan Hukum', skto: 'SKTO', dokumentasi: 'Laporan Kegiatan Tahunan' };
-const REQ_DOCS = Object.keys(DOC_TYPES).filter((k) => k !== 'dokumentasi');
+const DOC_TYPES = { sk_pengurusan: 'SK Pengurusan', surat_domisili: 'Surat Keterangan Domisili', program_kerja: 'Program Kerja', badan_hukum: 'Salinan Badan Hukum', skto: 'SKTO', dokumentasi: 'Laporan Kegiatan Tahunan', adart: 'AD/ART', company_profile: 'Company Profile' };
+// Dokumen opsional: laporan tahunan, AD/ART (terkunci seperti PDF lain), dan Company Profile (PDF/PPT/PPTX, TERBUKA untuk publik)
+const OPT_DOCS = ['dokumentasi', 'adart', 'company_profile'];
+const REQ_DOCS = Object.keys(DOC_TYPES).filter((k) => !OPT_DOCS.includes(k));
+const PPT_MIME = ['application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+const docMime = (jenis, nama) => (jenis !== 'company_profile' ? 'application/pdf' : /\.pptx$/i.test(nama) ? PPT_MIME[1] : /\.ppt$/i.test(nama) ? PPT_MIME[0] : 'application/pdf');
+const klas = (jenis) => (jenis === 'company_profile' ? 'publik' : 'kredensial');
 const VALIDASI = ['Terdata', 'Terdaftar', 'Teregister'];
 const INT_FIELDS = ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas', 'anggota_total'];
 const urlOk = (v) => { try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
@@ -114,6 +119,7 @@ const validPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length 
 // ---------- Upload ----------
 const magicOk = (f) => {
   const b = Buffer.alloc(12); const fd = fs.openSync(f.path, 'r'); fs.readSync(fd, b, 0, 12, 0); fs.closeSync(fd);
+  if (f.fieldname === 'company_profile') return b.subarray(0, 4).toString() === '%PDF' || (b[0] === 0x50 && b[1] === 0x4b && b[2] === 3 && b[3] === 4) || (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0);
   if (f.fieldname !== 'logo') return b.subarray(0, 4).toString() === '%PDF';
   return (b[0] === 0x89 && b.subarray(1, 4).toString() === 'PNG') || (b[0] === 0xff && b[1] === 0xd8) || (b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP');
 };
@@ -144,12 +150,12 @@ const makeUpload = (toPending) => (req, res, next) => {
   const m = multer({
     storage: multer.diskStorage({
       destination: (r, f, cb) => cb(null, toPending ? PENDING : f.fieldname === 'logo' ? LOGOS : FILES),
-      filename: (r, f, cb) => cb(null, crypto.randomBytes(16).toString('hex') + (f.fieldname === 'logo' ? '.img' : '.pdf')), // nama dibuat sistem
+      filename: (r, f, cb) => cb(null, crypto.randomBytes(16).toString('hex') + (f.fieldname === 'logo' ? '.img' : f.fieldname === 'company_profile' ? '.dat' : '.pdf')), // nama dibuat sistem
     }),
-    limits: { fileSize: (+S('max_pdf_mb') || 20) * 1048576, files: 7 },
+    limits: { fileSize: (+S('max_pdf_mb') || 20) * 1048576, files: 10 },
     fileFilter: (r, f, cb) => {
-      const ok = f.fieldname === 'logo' ? /^image\/(png|jpe?g|webp)$/.test(f.mimetype) : !!DOC_TYPES[f.fieldname] && f.mimetype === 'application/pdf';
-      cb(ok ? null : new Error('Dokumen harus berformat PDF, dan logo PNG/JPG/WEBP'), ok);
+      const ok = f.fieldname === 'logo' ? /^image\/(png|jpe?g|webp)$/.test(f.mimetype) : f.fieldname === 'company_profile' ? (f.mimetype === 'application/pdf' || PPT_MIME.includes(f.mimetype) || f.mimetype === 'application/octet-stream') && /\.(pdf|pptx?)$/i.test(f.originalname) : !!DOC_TYPES[f.fieldname] && f.mimetype === 'application/pdf';
+      cb(ok ? null : new Error('Dokumen harus berformat PDF (Company Profile boleh PPT/PPTX), dan logo PNG/JPG/WEBP'), ok);
     },
   }).fields([{ name: 'logo', maxCount: 1 }, ...Object.keys(DOC_TYPES).map((n) => ({ name: n, maxCount: 1 }))]);
   m(req, res, (err) => {
@@ -169,7 +175,7 @@ const toDrive = async (req, res, next) => {
   const files = allUploaded(req);
   const results = await Promise.allSettled(files.map(async (f) => {
     const logo = f.fieldname === 'logo';
-    const id = await driveUpload(f.path, `${logo ? 'Logo' : DOC_TYPES[f.fieldname] || f.fieldname} - ${cleanName(f.originalname)}`, { kind: logo ? 'logo' : 'pdf', mime: logo ? f.mimetype : 'application/pdf' });
+    const id = await driveUpload(f.path, `${logo ? 'Logo' : DOC_TYPES[f.fieldname] || f.fieldname} - ${cleanName(f.originalname)}`, { kind: logo ? 'logo' : 'pdf', mime: logo ? f.mimetype : docMime(f.fieldname, f.originalname) });
     f.filename = 'gd:' + id;
     fs.rm(f.path, { force: true }, () => {});
   }));
@@ -228,7 +234,7 @@ function listOrmas(q, { pub = false, paginate = true } = {}) {
   const page = Math.max(1, +q.page || 1), size = Math.min(100, Math.max(1, +q.pageSize || 10));
   const cols = pub
     ? 'o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.anggota_total,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori,o.kategori_id'
-    : `o.*,(o.logo_key is not null) as has_logo,k.nama_kategori,(select count(distinct d.jenis_dokumen) from dokumen_ormas d where d.ormas_id=o.id and d.jenis_dokumen is not null and d.jenis_dokumen!='dokumentasi' and d.pending=0) as jumlah_dok,(select count(*) from perubahan_ormas pp where pp.ormas_id=o.id) as has_pending`;
+    : `o.*,(o.logo_key is not null) as has_logo,k.nama_kategori,(select count(distinct d.jenis_dokumen) from dokumen_ormas d where d.ormas_id=o.id and d.jenis_dokumen is not null and d.jenis_dokumen not in ('dokumentasi','adart','company_profile') and d.pending=0) as jumlah_dok,(select count(*) from perubahan_ormas pp where pp.ormas_id=o.id) as has_pending`;
   const items = db.prepare(`select ${cols} ${from} ${where} ${order} ${paginate ? 'limit ? offset ?' : ''}`).all(...p, ...(paginate ? [size, (page - 1) * size] : []));
   return { items, total, page, pageSize: size };
 }
@@ -239,10 +245,18 @@ app.get('/api/public/ormas', (req, res) => {
 });
 
 app.get('/api/public/ormas/:kode', (req, res) => {
-  const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
+  const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.link_youtube,o.link_tiktok,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
   if (!o || S('catalog_public') !== 'true') return res.status(404).json({ error: 'Data ormas tidak ditemukan' });
   o.docs = db.prepare(`select id,jenis_dokumen,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and klasifikasi_akses='kredensial' and jenis_dokumen is not null and pending=0 order by id`).all(o.id);
+  o.company_profile = db.prepare(`select id,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and jenis_dokumen='company_profile' and pending=0 order by id desc limit 1`).get(o.id) || null;
   res.json(o);
+});
+
+// Company Profile ormas: TERBUKA untuk umum (tanpa username/password), hanya untuk ormas yang dipublikasikan
+app.get('/api/public/ormas/:kode/company-profile', limiter({ limit: 60 }), (req, res) => {
+  const d = db.prepare(`select d.*,o.status_publikasi from dokumen_ormas d join ormas o on o.id=d.ormas_id where o.kode_ormas=? and d.jenis_dokumen='company_profile' and d.pending=0 order by d.id desc limit 1`).get(req.params.kode);
+  if (!d || d.status_publikasi !== 'Publik' || S('catalog_public') !== 'true') return res.status(404).json({ error: 'Company profile tidak tersedia' });
+  sendPdf(req, res, d, req.query.dl === '1', null);
 });
 
 app.get('/api/logo/:kode', async (req, res) => {
@@ -298,19 +312,20 @@ app.get('/api/public/files/:id', (req, res) => {
 });
 
 function sendPdf(req, res, d, download, jenis) {
+  const mime = d.mime_type || 'application/pdf', isPdf = mime === 'application/pdf';
   const drive = isDrive(d.storage_key);
   const p = drive ? null : path.join(d.pending ? PENDING : FILES, path.basename(d.storage_key));
   if (!drive && !fs.existsSync(p)) return res.status(404).json({ error: 'Berkas tidak ditemukan di penyimpanan' });
-  if (!req.headers.range || req.headers.range.startsWith('bytes=0-')) log(req, jenis, d.ormas_id, `${download ? 'Unduh' : 'Buka'} dokumen: ${d.nama_file}`);
+  if (jenis && (!req.headers.range || req.headers.range.startsWith('bytes=0-'))) log(req, jenis, d.ormas_id, `${download ? 'Unduh' : 'Buka'} dokumen: ${d.nama_file}`);
   res.removeHeader('Content-Security-Policy'); // agar viewer PDF bawaan browser dapat berjalan
-  res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(d.nama_file)}` });
+  res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `${download || !isPdf ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(d.nama_file)}` });
   if (drive) {
     retry(() => driveDownload(d.storage_key.slice(3)), [800, 2000])
-      .then((buf) => res.type('application/pdf').send(buf))
+      .then((buf) => res.type(mime).send(buf))
       .catch((e) => { console.error('Gagal mengambil dari Google Drive:', e.message); res.status(502).json({ error: 'Dokumen tidak dapat diambil dari Google Drive saat ini. Coba lagi sebentar lagi.' }); });
     return;
   }
-  res.sendFile(p, { headers: { 'Content-Type': 'application/pdf' } });
+  res.sendFile(p, { headers: { 'Content-Type': mime } });
 }
 
 // ===== Auth admin =====
@@ -382,7 +397,7 @@ app.post('/api/auth/reset', forgotLimiter, (req, res) => {
 
 // ===== Portal ormas: akun TETAP milik ormas (terpisah dari kredensial harian PDF) =====
 const portalLimiter = limiter();
-const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram'];
+const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'];
 const portalUser = (kode) => kode.toLowerCase().replace('-', '');
 function newPortalAccount(ormasId, kode) {
   const password = rnd(10), username = portalUser(kode);
@@ -571,7 +586,7 @@ app.get('/api/admin/dashboard', auth('view_ormas'), (req, res) => {
 });
 
 // --- Data ormas ---
-const TEXT_FIELDS = { nama_ketua: 150, sekretaris: 150, bendahara: 150, nomor_whatsapp_ketua: 25, email_ormas: 120, alamat: 500, bentuk: 100, bidang_kegiatan: 300, legal_jenis: 100, nomor_sk: 100, legal_tahun: 4, legal_berlaku_sd: 50, skto_nomor: 100, skto_tahun: 4, skto_berlaku_sd: 50, validasi: 100, catatan_verifikasi: 1000, link_dokumentasi: 500, link_instagram: 200 };
+const TEXT_FIELDS = { nama_ketua: 150, sekretaris: 150, bendahara: 150, nomor_whatsapp_ketua: 25, email_ormas: 120, alamat: 500, bentuk: 100, bidang_kegiatan: 300, legal_jenis: 100, nomor_sk: 100, legal_tahun: 4, legal_berlaku_sd: 50, skto_nomor: 100, skto_tahun: 4, skto_berlaku_sd: 50, validasi: 100, catatan_verifikasi: 1000, link_dokumentasi: 500, link_instagram: 200, link_youtube: 200, link_tiktok: 200 };
 function validateOrmas(b) {
   const nama = String(b.nama_ormas || '').trim();
   if (!nama) return 'Nama ormas wajib diisi';
@@ -598,6 +613,10 @@ function validateOrmas(b) {
   if (ld && !urlOk(ld)) return 'Link dokumentasi harus berupa tautan yang diawali http:// atau https://';
   const ig = igUrl(b.link_instagram);
   if (ig && !(urlOk(ig) && /(^|\.)instagram\.com$/i.test(new URL(ig).hostname))) return 'Link Instagram tidak valid (contoh: https://instagram.com/namaormas atau @namaormas)';
+  for (const [k, re, nm] of [['link_youtube', /(^|\.)(youtube\.com|youtu\.be)$/i, 'YouTube'], ['link_tiktok', /(^|\.)tiktok\.com$/i, 'TikTok']]) {
+    const v = String(b[k] || '').trim();
+    if (v && !(urlOk(v) && re.test(new URL(v).hostname))) return `Link ${nm} tidak valid (contoh: https://${nm === 'YouTube' ? 'youtube.com/@namaormas' : 'tiktok.com/@namaormas'})`;
+  }
   return null;
 }
 const rowOf = (b, d = {}) => {
@@ -614,7 +633,7 @@ const rowOf = (b, d = {}) => {
 const uploadedDocs = (req) => Object.keys(DOC_TYPES).filter((k) => req.files?.[k]?.[0]).map((k) => [k, req.files[k][0]]);
 const addDoc = (ormasId, jenis, f, adminId, pending = 0) =>
   db.prepare('insert into dokumen_ormas(ormas_id,jenis_dokumen,nama_file,storage_key,mime_type,ukuran_file,uploaded_at,uploaded_by,klasifikasi_akses,pending) values(?,?,?,?,?,?,?,?,?,?)')
-    .run(ormasId, jenis, cleanName(f.originalname), f.filename, 'application/pdf', f.size, now(), adminId, 'kredensial', pending);
+    .run(ormasId, jenis, cleanName(f.originalname), f.filename, docMime(jenis, f.originalname), f.size, now(), adminId, klas(jenis), pending);
 
 app.get('/api/admin/ormas', auth('view_ormas'), (req, res) => res.json(withExpiry(listOrmas(req.query))));
 app.get('/api/admin/ormas/:id', auth('view_ormas'), (req, res) => {
@@ -767,7 +786,7 @@ app.post('/api/admin/pendaftaran/:id/approve', auth('manage_ormas'), async (req,
     for (const d of pdocs) {
       const src = path.join(PENDING, path.basename(d.storage_key));
       if (!fs.existsSync(src)) throw new Error(`Berkas "${d.nama_file}" tidak ditemukan di penyimpanan sementara`);
-      if (driveOn()) { const g = await driveUpload(src, `${DOC_TYPES[d.jenis] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: 'application/pdf' }); uploaded.push(g); keys.set(d.id, 'gd:' + g); }
+      if (driveOn()) { const g = await driveUpload(src, `${DOC_TYPES[d.jenis] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: docMime(d.jenis, d.nama_file) }); uploaded.push(g); keys.set(d.id, 'gd:' + g); }
       else { const dst = path.join(FILES, path.basename(d.storage_key)); fs.renameSync(src, dst); moved.push([dst, src]); keys.set(d.id, d.storage_key); }
     }
     if (p.logo_key) {
@@ -784,14 +803,14 @@ app.post('/api/admin/pendaftaran/:id/approve', auth('manage_ormas'), async (req,
       if (!kat) kat = { id: db.prepare('insert into kategori(nama_kategori,status_aktif,urutan) values(?,1,?)').run(kn, db.prepare('select coalesce(max(urutan),0)+1 n from kategori').get().n).lastInsertRowid };
       const row = rowOf({ ...JSON.parse(p.data), nama_ormas: p.nama_ormas, kategori_id: kat.id }, {});
       row.status_publikasi = 'Publik'; // tampil di katalog setelah disetujui
-      row.status_dokumen = pdocs.filter((d) => d.jenis !== 'dokumentasi').length >= REQ_DOCS.length ? 'Lengkap' : 'Belum Lengkap';
+      row.status_dokumen = pdocs.filter((d) => REQ_DOCS.includes(d.jenis)).length >= REQ_DOCS.length ? 'Lengkap' : 'Belum Lengkap';
       const cols = Object.keys(row);
       const seq = +S('ormas_seq') + 1; setSetting('ormas_seq', seq);
       const kode = 'Ormas-' + String(seq).padStart(3, '0');
       const id = db.prepare(`insert into ormas(kode_ormas,logo_key,${cols.join(',')},created_at,updated_at,created_by,updated_by) values(?,?,${cols.map(() => '?').join(',')},?,?,?,?)`)
         .run(kode, logoKey, ...cols.map((c) => row[c]), now(), now(), req.admin.id, req.admin.id).lastInsertRowid;
       pdocs.forEach((d) => db.prepare('insert into dokumen_ormas(ormas_id,jenis_dokumen,nama_file,storage_key,mime_type,ukuran_file,uploaded_at,uploaded_by,klasifikasi_akses,pending) values(?,?,?,?,?,?,?,?,?,0)')
-        .run(id, d.jenis, d.nama_file, keys.get(d.id), 'application/pdf', d.ukuran, now(), req.admin.id, 'kredensial'));
+        .run(id, d.jenis, d.nama_file, keys.get(d.id), docMime(d.jenis, d.nama_file), d.ukuran, now(), req.admin.id, klas(d.jenis)));
       db.prepare(`update pendaftaran_ormas set status='disetujui',ormas_id=?,kategori_nama=?,updated_at=? where id=?`).run(id, kn, now(), p.id);
       return { id, kode };
     }).immediate();
@@ -834,7 +853,7 @@ app.post('/api/admin/ormas/:id/verify', auth('manage_ormas'), async (req, res) =
     for (const d of pdocs) {
       const src = path.join(PENDING, path.basename(d.storage_key));
       if (!fs.existsSync(src)) throw new Error(`Berkas "${d.nama_file}" tidak ditemukan di penyimpanan sementara`);
-      if (driveOn()) { const gid = await driveUpload(src, `${DOC_TYPES[d.jenis_dokumen] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: 'application/pdf' }); uploaded.push(gid); newKey.set(d.id, 'gd:' + gid); }
+      if (driveOn()) { const gid = await driveUpload(src, `${DOC_TYPES[d.jenis_dokumen] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: docMime(d.jenis_dokumen, d.nama_file) }); uploaded.push(gid); newKey.set(d.id, 'gd:' + gid); }
       else { const dst = path.join(FILES, path.basename(d.storage_key)); fs.renameSync(src, dst); moved.push([dst, src]); newKey.set(d.id, d.storage_key); }
     }
     if (pd.logo_key) {
@@ -857,7 +876,7 @@ app.post('/api/admin/ormas/:id/verify', auth('manage_ormas'), async (req, res) =
         db.prepare('select * from dokumen_ormas where ormas_id=? and pending=0 and jenis_dokumen=?').all(id, d.jenis_dokumen).forEach((x) => { oldDocs.push(x); db.prepare('delete from dokumen_ormas where id=?').run(x.id); });
         db.prepare('update dokumen_ormas set storage_key=?,pending=0,uploaded_by=?,uploaded_at=? where id=?').run(newKey.get(d.id), req.admin.id, now(), d.id);
       }
-      const jumlah = db.prepare(`select count(distinct jenis_dokumen) c from dokumen_ormas where ormas_id=? and pending=0 and jenis_dokumen is not null and jenis_dokumen!='dokumentasi'`).get(id).c;
+      const jumlah = db.prepare(`select count(distinct jenis_dokumen) c from dokumen_ormas where ormas_id=? and pending=0 and jenis_dokumen is not null and jenis_dokumen not in ('dokumentasi','adart','company_profile')`).get(id).c;
       const prev = pd.status_sebelumnya;
       const status = !prev || prev === 'Perlu Diverifikasi' || prev === 'Belum Lengkap' ? (jumlah >= REQ_DOCS.length ? 'Lengkap' : 'Belum Lengkap') : prev;
       const logoVal = logoNewKey || (pd.remove_logo ? null : o.logo_key);
