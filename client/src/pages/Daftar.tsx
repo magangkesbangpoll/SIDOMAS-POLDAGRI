@@ -59,7 +59,7 @@ export function Daftar() {
         {T('bidang_kegiatan', 'Bidang kegiatan', { span: true, max: 300 })}
         <div className="md:col-span-2"><label className="lbl" htmlFor="lg">Logo ormas</label><input id="lg" type="file" accept="image/png,image/jpeg,image/webp" className="text-sm" onChange={(e) => setLogo(e.target.files?.[0] || null)} /></div>
         {H('Nama Pengurus')}
-        {T('nama_ketua', 'Ketua *', { req: true })}{T('sekretaris', 'Sekretaris')}{T('bendahara', 'Bendahara')}{T('nomor_whatsapp_ketua', 'Nomor telepon / WhatsApp ketua', { type: 'tel', ph: '081234567890' })}
+        {T('nama_ketua', 'Ketua *', { req: true })}{T('sekretaris', 'Sekretaris')}{T('bendahara', 'Bendahara')}{T('nomor_whatsapp_ketua', 'Nomor WhatsApp ketua * (untuk konfirmasi dari kami)', { type: 'tel', ph: '081234567890', req: true, span: true })}
         {H('Kontak dan Alamat')}
         {T('email_ormas', 'Email ormas', { type: 'email', span: true })}
         <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat *</label><textarea id="al" rows={2} maxLength={500} required className="inp" value={f.alamat} onChange={(e) => set('alamat', e.target.value)} /></div>
