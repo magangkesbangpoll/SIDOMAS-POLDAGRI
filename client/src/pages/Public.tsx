@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Building2, Download, ExternalLink, FileText, Link2, Lock, Mail, MapPin, MessageCircle, Search, ShieldCheck, Users } from 'lucide-react';
 import { api } from '../api';
-import { Badge, DOC_STATUS, DOC_TYPES, DOKUMENTASI, Empty, InstagramIcon, nf, rincian, ErrorBox, Modal, Pager, fmtDate, fmtSize, qs, useDebounced, useFetch } from '../ui';
+import { ADART, Badge, DOC_STATUS, DOC_TYPES, DOKUMENTASI, Empty, InstagramIcon, nf, rincian, ErrorBox, Modal, Pager, fmtDate, fmtSize, qs, useDebounced, useFetch } from '../ui';
 
 export const useMeta = () => useFetch<any>('/public/meta');
 const waNumber = (n: string) => n.replace(/\D/g, '').replace(/^0/, '62'); // 0812... -> 62812... untuk tautan wa.me
@@ -173,7 +173,7 @@ export function OrmasPublic() {
     }
     setAcc(null); setAsk({ doc: d, dl });
   };
-  const label = (j: string) => [...DOC_TYPES, DOKUMENTASI].find(([k]) => k === j)?.[1] || j;
+  const label = (j: string) => [...DOC_TYPES, DOKUMENTASI, ADART].find(([k]) => k === j)?.[1] || j;
   const byType = (j: string) => o?.docs.find((d: any) => d.jenis_dokumen === j);
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -188,11 +188,18 @@ export function OrmasPublic() {
             <div className="grid gap-3 sm:grid-cols-4">{[['Ketua', o.nama_ketua], ['Sekretaris', o.sekretaris], ['Bendahara', o.bendahara]].map(([l, v]) => <div key={l} className="rounded-md bg-navy-50 p-3"><p className="text-xs text-slate-500">{l}</p><p className="font-semibold text-navy-900">{v || '-'}</p></div>)}
               <div className="rounded-md bg-gold-400/20 p-3"><p className="flex items-center gap-1 text-xs text-slate-600"><Users size={13} />Jumlah anggota</p><p className="font-semibold text-navy-900">{o.anggota_total == null ? '-' : `${nf(o.anggota_total)} orang`}</p></div></div>
             {o.anggota_total != null && rincian(o) && <p className="mt-3 text-sm text-slate-600">Dari total anggota: <b>{rincian(o)}</b></p>}</div>
-          {(o.link_dokumentasi || o.link_instagram) && <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Dokumentasi dan Media Sosial</h2>
+          {(o.link_dokumentasi || o.link_instagram || o.link_youtube || o.link_tiktok) && <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Dokumentasi dan Media Sosial</h2>
             <div className="flex flex-wrap gap-3 text-sm">
               {o.link_dokumentasi && <a className="btn-o" target="_blank" rel="noopener noreferrer" href={o.link_dokumentasi}><Link2 size={16} /> Dokumentasi kegiatan</a>}
               {o.link_instagram && <a className="btn-o" target="_blank" rel="noopener noreferrer" href={o.link_instagram}><InstagramIcon size={16} className="text-pink-600" /> Instagram ormas</a>}
+              {o.link_youtube && <a className="btn-o" target="_blank" rel="noopener noreferrer" href={o.link_youtube}><ExternalLink size={16} className="text-red-600" /> YouTube</a>}
+              {o.link_tiktok && <a className="btn-o" target="_blank" rel="noopener noreferrer" href={o.link_tiktok}><ExternalLink size={16} /> TikTok</a>}
             </div></div>}
+          {o.company_profile && <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Profil Ormas (Company Profile)</h2>
+            <div className="flex flex-wrap items-center gap-3 text-sm"><FileText className="text-red-600" /><span>{o.company_profile.nama_file} · {fmtSize(o.company_profile.ukuran_file)}</span>
+              <a className="btn-p" target="_blank" rel="noopener noreferrer" href={`/api/public/ormas/${o.kode_ormas}/company-profile`}><ExternalLink size={15} /> Lihat</a>
+              <a className="btn-o" href={`/api/public/ormas/${o.kode_ormas}/company-profile?dl=1`}><Download size={15} /> Unduh</a></div>
+            <p className="mt-1 text-xs text-slate-500">Terbuka untuk umum, tanpa username dan password. File PPT/PPTX akan terunduh.</p></div>}
           <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Kontak</h2>
             <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
               <p className="flex min-w-0 items-center gap-2"><Mail size={16} className="shrink-0 text-navy-700" />{o.email_ormas ? <a className="min-w-0 text-navy-700 underline [overflow-wrap:anywhere]" href={`mailto:${o.email_ormas}`}>{o.email_ormas}</a> : <span className="text-slate-500">Email belum diisi</span>}</p>
@@ -205,7 +212,7 @@ export function OrmasPublic() {
             <p className="mt-1 text-xs text-slate-500">Letak pada peta dicari dari teks alamat, sehingga bisa kurang tepat.</p></div>}
           <div className="card divide-y divide-slate-100">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4"><h2 className="font-serif text-lg font-bold text-navy-900">Dokumen</h2><p className="flex items-center gap-1 text-xs text-slate-500"><Lock size={13} /> {acc ? `Akses terbuka hingga ${fmtDate(acc.expires_at)}` : 'Terbatas: perlu username dan password dari admin'}</p></div>
-            {[...DOC_TYPES, DOKUMENTASI].filter(([j]) => j !== 'dokumentasi' || byType(j)).map(([j, l]) => { const d = byType(j); return (
+            {[...DOC_TYPES, DOKUMENTASI, ADART].filter(([j]) => !['dokumentasi', 'adart'].includes(j) || byType(j)).map(([j, l]) => { const d = byType(j); return (
               <div key={j} className="flex flex-wrap items-center justify-between gap-3 p-4">
                 <div className="flex items-center gap-3"><FileText className={d ? 'text-red-600' : 'text-slate-300'} /><div><p className="text-sm font-semibold">{l}</p><p className="text-xs text-slate-500">{d ? `PDF · ${fmtSize(d.ukuran_file)}` : 'Belum diunggah'}</p></div></div>
                 {d && <div className="flex gap-2"><button className="btn-p" onClick={() => click(d, false)}>{acc ? <ExternalLink size={15} /> : <Lock size={15} />} {view?.id === d.id ? 'Tutup PDF' : 'Buka PDF'}</button><button className="btn-o" onClick={() => click(d, true)}>{acc ? <Download size={15} /> : <Lock size={15} />} Download PDF</button></div>}

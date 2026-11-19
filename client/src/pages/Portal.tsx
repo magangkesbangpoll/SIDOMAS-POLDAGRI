@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, ExternalLink, KeyRound, LogOut, Save, Upload } from 'lucide-react';
 import { api } from '../api';
-import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, DOKUMENTASI, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
+import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, ADART, COMPANY_PROFILE, DOKUMENTASI, docAccept, docTypeOk, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
 import { ChangePassword, PasswordInput, Shell } from './AdminAuth';
 
 export function PortalLogin() {
@@ -50,7 +50,7 @@ export function PortalReset() {
   );
 }
 
-const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram'];
+const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'];
 
 export function PortalHome() {
   const nav = useNavigate(); const toast = useToast();
@@ -69,7 +69,7 @@ export function PortalHome() {
   const T = (k: string, label: string, o: any = {}) => <div className={o.span ? 'md:col-span-2' : ''}><label className="lbl" htmlFor={k}>{label}</label><input id={k} type={o.type || 'text'} className="inp" placeholder={o.ph} maxLength={o.max} value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></div>;
   const H = (t: string) => <h3 className="border-b border-slate-200 pb-1 pt-2 font-serif font-bold text-navy-900 md:col-span-2">{t}</h3>;
   const pick = (j: string, x?: File) => {
-    if (!x) return; if (x.type !== 'application/pdf') return toast(`"${x.name}" bukan PDF`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
+    if (!x) return; if (!docTypeOk(j, x)) return toast(`"${x.name}" format tidak didukung${j === 'company_profile' ? ' (PDF, PPT, atau PPTX)' : ' (harus PDF)'}`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
     setFiles((p) => ({ ...p, [j]: x }));
   };
   const uploadLaporan = async () => {
@@ -140,7 +140,16 @@ export function PortalHome() {
                 {cur && <button type="button" className="mt-1 text-xs font-semibold text-navy-700 underline" onClick={() => setView(view?.id === cur.id ? null : cur)}><ExternalLink size={12} className="mr-1 inline" />{view?.id === cur.id ? 'Tutup PDF' : 'Lihat PDF tersimpan'}</button>}
               </div>); })}
           </div>
-          {H('Tautan Dokumentasi dan Media Sosial (opsional)')}
+          {H('Dokumen Tambahan (opsional)')}
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+          {[ADART, COMPANY_PROFILE].map(([j, l]) => { const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
+            <div key={j} className={`rounded-md border p-3 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
+              <label className="lbl" htmlFor={'f_' + j}>{l}{j === 'company_profile' ? ' (PDF / PPT / PPTX, tampil terbuka di katalog)' : ' (PDF)'}</label>
+              <input id={'f_' + j} type="file" accept={docAccept(j)} className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
+              <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}){cur.pending && ' · menunggu verifikasi'}</> : 'Belum diunggah'}</p>
+            </div>); })}
+        </div>
+        {H('Tautan Dokumentasi dan Media Sosial (opsional)')}
           <LinkInputs f={f} set={set} />
 
           {view && <iframe title={view.nama_file} src={`/api/portal/files/${view.id}`} className="h-[60vh] w-full rounded border border-slate-300 md:col-span-2" />}

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Send } from 'lucide-react';
 import { api } from '../api';
-import { ANGGOTA_KEYS, BerlakuInput, DOC_TYPES, DOKUMENTASI, KEMANTREN, LinkInputs, MemberInputs, fmtSize, useFetch, useToast } from '../ui';
+import { ANGGOTA_KEYS, BerlakuInput, ADART, COMPANY_PROFILE, DOC_TYPES, DOKUMENTASI, docAccept, docTypeOk, KEMANTREN, LinkInputs, MemberInputs, fmtSize, useFetch, useToast } from '../ui';
 
-const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram'];
+const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'];
 
 // Pendaftaran ormas baru (publik). Isian sama dengan halaman ormas setelah login, tanpa SKTO;
 // nama ormas dan kategori diisi sendiri oleh pendaftar.
@@ -19,13 +19,13 @@ export function Daftar() {
   const T = (k: string, label: string, o: any = {}) => <div className={o.span ? 'md:col-span-2' : ''}><label className="lbl" htmlFor={k}>{label}</label><input id={k} type={o.type || 'text'} className="inp" placeholder={o.ph} maxLength={o.max} required={o.req} value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></div>;
   const H = (t: string) => <h3 className="border-b border-slate-200 pb-1 pt-2 font-serif font-bold text-navy-900 md:col-span-2">{t}</h3>;
   const pick = (j: string, x?: File) => {
-    if (!x) return; if (x.type !== 'application/pdf') return toast(`"${x.name}" bukan PDF`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
+    if (!x) return; if (!docTypeOk(j, x)) return toast(`"${x.name}" format tidak didukung${j === 'company_profile' ? ' (PDF, PPT, atau PPTX)' : ' (harus PDF)'}`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
     setFiles((p) => ({ ...p, [j]: x }));
   };
   const FileBox = (j: string, l: string) => (
     <div key={j} className={`rounded-md border p-3 ${files[j] ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
       <label className="lbl" htmlFor={'f_' + j}>{l}</label>
-      <input id={'f_' + j} type="file" accept="application/pdf" className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
+      <input id={'f_' + j} type="file" accept={docAccept(j)} className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
       {files[j] && <p className="mt-1 text-xs text-slate-600">{files[j].name} ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></p>}
     </div>
   );
@@ -69,6 +69,8 @@ export function Daftar() {
         {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d" forever value={f.legal_berlaku_sd ?? ''} onChange={(v: string) => set('legal_berlaku_sd', v)} />
         {H(`Dokumen PDF (maks. ${maxMb} MB per file)`)}
         <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{DOC_TYPES.filter(([j]: string[]) => j !== 'skto').map(([j, l]: string[]) => FileBox(j, l))}</div>
+        {H('Dokumen Tambahan (opsional)')}
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{FileBox(ADART[0], 'AD/ART (PDF)')}{FileBox(COMPANY_PROFILE[0], 'Company Profile ormas (PDF / PPT / PPTX, tampil terbuka di katalog)')}</div>
         {H('Tautan Dokumentasi dan Media Sosial (opsional)')}
         <LinkInputs f={f} set={set} />
         <div className="flex justify-end md:col-span-2"><button className="btn-p" disabled={busy}><Send size={16} /> {busy ? 'Mengirim…' : 'Kirim pendaftaran'}</button></div>

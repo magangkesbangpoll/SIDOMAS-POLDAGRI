@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Building2, ChevronDown, ChevronUp, Copy, Download, ExternalLink, Eye, FileText, KeyRound, TriangleAlert, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '../api';
-import { ANGGOTA_KEYS, BerlakuInput, Badge, Confirm, DOC_STATUS, DOC_TYPES, DOKUMENTASI, ExpBadge, InstagramIcon, KEMANTREN, LinkInputs, MemberInputs, VALIDASI, nf, rincian, tglIndo, Empty, ErrorBox, Modal, Pager, STATUS_COLOR, Skeleton, fmtDate, fmtSize, qs, useDebounced, useFetch, useToast } from '../ui';
+import { ANGGOTA_KEYS, BerlakuInput, Badge, Confirm, DOC_STATUS, DOC_TYPES, ADART, COMPANY_PROFILE, DOKUMENTASI, docAccept, docTypeOk, ExpBadge, InstagramIcon, KEMANTREN, LinkInputs, MemberInputs, VALIDASI, nf, rincian, tglIndo, Empty, ErrorBox, Modal, Pager, STATUS_COLOR, Skeleton, fmtDate, fmtSize, qs, useDebounced, useFetch, useToast } from '../ui';
 import { useAuth } from './Admin';
 
 export function Dashboard() {
@@ -82,7 +82,7 @@ export function OrmasPage() {
   );
 }
 
-const KEYS = ['nama_ormas', 'kategori_id', 'bentuk', 'bidang_kegiatan', 'kemantren', 'validasi', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'status_dokumen', 'status_operasional', 'status_publikasi', 'catatan_verifikasi', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram'];
+const KEYS = ['nama_ormas', 'kategori_id', 'bentuk', 'bidang_kegiatan', 'kemantren', 'validasi', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'status_dokumen', 'status_operasional', 'status_publikasi', 'catatan_verifikasi', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'];
 const DEFAULTS: any = { status_dokumen: 'Belum Lengkap', status_operasional: 'Aktif', status_publikasi: 'Disembunyikan' };
 
 function OrmasForm({ item, cats, meta, onClose, onSaved }: any) {
@@ -98,7 +98,7 @@ function OrmasForm({ item, cats, meta, onClose, onSaved }: any) {
   const H = (t: string) => <h3 className="border-b border-slate-200 pb-1 pt-2 font-serif font-bold text-navy-900 md:col-span-2">{t}</h3>;
   const pick = (j: string, x?: File) => {
     if (!x) return;
-    if (x.type !== 'application/pdf') return toast(`"${x.name}" bukan PDF`, false);
+    if (!docTypeOk(j, x)) return toast(`"${x.name}" format tidak didukung${j === 'company_profile' ? ' (PDF, PPT, atau PPTX)' : ' (harus PDF)'}`, false);
     if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
     setFiles((p) => ({ ...p, [j]: x }));
   };
@@ -157,6 +157,15 @@ function OrmasForm({ item, cats, meta, onClose, onSaved }: any) {
               <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}). Pilih file baru untuk mengganti.</> : edit ? 'Belum diunggah' : 'Wajib diunggah'}</p>
             </div>); })}
         </div>
+        {H('Dokumen Tambahan (opsional)')}
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+          {[ADART, COMPANY_PROFILE].map(([j, l]) => { const cur = docs.find((d: any) => d.jenis_dokumen === j); return (
+            <div key={j} className={`rounded-md border p-3 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
+              <label className="lbl" htmlFor={'f_' + j}>{l}{j === 'company_profile' ? ' (PDF / PPT / PPTX, tampil terbuka di katalog)' : ' (PDF)'}</label>
+              <input id={'f_' + j} type="file" accept={docAccept(j)} className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
+              <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)})</> : 'Belum diunggah'}</p>
+            </div>); })}
+        </div>
         {H('Dokumentasi Kegiatan dan Media Sosial (opsional)')}
         <LinkInputs f={f} set={set} />
         {(() => { const [j, l] = DOKUMENTASI; const cur = docs.find((d) => d.jenis_dokumen === j); return (
@@ -189,6 +198,7 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
             {row('Legal standing', <>{[o.legal_jenis, o.nomor_sk, o.legal_tahun && `Tahun ${o.legal_tahun}`, o.exp.legal.tgl ? `s/d ${tglIndo(o.exp.legal.tgl)}` : o.legal_berlaku_sd && `s/d ${o.legal_berlaku_sd}`].filter(Boolean).join(' · ') || '-'}<br /><ExpBadge e={o.exp.legal} full /></>)}{row('SKTO', <>{[o.skto_nomor, o.skto_tahun && `Tahun ${o.skto_tahun}`, o.exp.skto.tgl ? `s/d ${tglIndo(o.exp.skto.tgl)}` : o.skto_berlaku_sd && `s/d ${o.skto_berlaku_sd}`].filter(Boolean).join(' · ') || '-'}<br /><ExpBadge e={o.exp.skto} full /></>)}
             {row('Jumlah anggota', nf(o.anggota_total))}{row('Perempuan', nf(o.anggota_perempuan))}{row('Lansia', nf(o.anggota_lansia))}{row('Disabilitas', nf(o.anggota_disabilitas))}
             {row('Link dokumentasi', o.link_dokumentasi && <a className="text-navy-700 underline" target="_blank" rel="noreferrer" href={o.link_dokumentasi}>Buka tautan</a>)}{row('Instagram', o.link_instagram && <a className="inline-flex items-center gap-1 text-pink-600 underline" target="_blank" rel="noreferrer" href={o.link_instagram}><InstagramIcon size={14} />Buka Instagram</a>)}
+            {row('YouTube', o.link_youtube && <a className="text-red-600 underline" target="_blank" rel="noreferrer" href={o.link_youtube}>Buka YouTube</a>)}{row('TikTok', o.link_tiktok && <a className="text-navy-700 underline" target="_blank" rel="noreferrer" href={o.link_tiktok}>Buka TikTok</a>)}
             {row('Status operasional', o.status_operasional)}{row('Status publikasi', o.status_publikasi)}{row('Diperbarui', fmtDate(o.updated_at))}
           </dl>
           {o.catatan_verifikasi && <p className="rounded bg-slate-50 p-3 text-sm"><b>Catatan verifikasi:</b> {o.catatan_verifikasi}</p>}
@@ -198,6 +208,7 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
               <li key={j} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className={`mr-1 inline ${d ? 'text-red-600' : 'text-slate-300'}`} /><b>{l}</b><span className="block text-xs text-slate-500">{d ? `${d.nama_file} · ${fmtSize(d.ukuran_file)} · ${fmtDate(d.uploaded_at)}` : 'Belum diunggah'}</span></span>
                 {d && me.perms.includes('view_docs') && <span className="flex gap-2"><button className="btn-p py-1" onClick={() => setView(view?.id === d.id ? null : d)}><ExternalLink size={14} /> Buka PDF</button><a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a></span>}</li>); })}
               {(() => { const d = o.docs.find((x: any) => x.jenis_dokumen === 'dokumentasi'); return d ? <li className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className="mr-1 inline text-red-600" /><b>Dokumentasi Kegiatan</b><span className="block text-xs text-slate-500">{d.nama_file} · {fmtSize(d.ukuran_file)} · {fmtDate(d.uploaded_at)}</span></span>{me.perms.includes('view_docs') && <span className="flex gap-2"><button className="btn-p py-1" onClick={() => setView(view?.id === d.id ? null : d)}><ExternalLink size={14} /> Buka PDF</button><a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a></span>}</li> : null; })()}
+              {[ADART, COMPANY_PROFILE].map(([j, l]) => { const d = o.docs.find((x: any) => x.jenis_dokumen === j); return d ? <li key={j} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className="mr-1 inline text-red-600" /><b>{l}{j === 'company_profile' ? ' (terbuka untuk publik)' : ''}</b><span className="block text-xs text-slate-500">{d.nama_file} · {fmtSize(d.ukuran_file)} · {fmtDate(d.uploaded_at)}</span></span>{me.perms.includes('view_docs') && <a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a>}</li> : null; })}
               {o.docs.filter((x: any) => !x.jenis_dokumen).map((d: any) => <li key={d.id} className="flex items-center justify-between p-3 text-sm"><span>{d.nama_file} <span className="text-xs text-slate-500">(dokumen lama)</span></span>{me.perms.includes('view_docs') && <a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /></a>}</li>)}
             </ul></div>
           {view && <iframe title={view.nama_file} src={`/api/admin/files/${view.id}`} className="h-[60vh] w-full rounded border border-slate-300" />}
@@ -208,7 +219,7 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
   );
 }
 
-const FIELD_LABELS: [string, string][] = [['bentuk', 'Bentuk'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['nama_ketua', 'Ketua'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['nomor_whatsapp_ketua', 'Telepon / WhatsApp ketua'], ['email_ormas', 'Email ormas'], ['alamat', 'Alamat kantor / sekretariat'], ['legal_jenis', 'Legal standing: jenis'], ['nomor_sk', 'Legal standing: nomor'], ['legal_tahun', 'Legal standing: tahun'], ['legal_berlaku_sd', 'Legal standing: berlaku s/d'], ['skto_nomor', 'SKTO: nomor'], ['skto_tahun', 'SKTO: tahun'], ['skto_berlaku_sd', 'SKTO: berlaku s/d'], ['anggota_total', 'Jumlah total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas'], ['link_dokumentasi', 'Link dokumentasi'], ['link_instagram', 'Instagram']];
+const FIELD_LABELS: [string, string][] = [['bentuk', 'Bentuk'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['nama_ketua', 'Ketua'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['nomor_whatsapp_ketua', 'Telepon / WhatsApp ketua'], ['email_ormas', 'Email ormas'], ['alamat', 'Alamat kantor / sekretariat'], ['legal_jenis', 'Legal standing: jenis'], ['nomor_sk', 'Legal standing: nomor'], ['legal_tahun', 'Legal standing: tahun'], ['legal_berlaku_sd', 'Legal standing: berlaku s/d'], ['skto_nomor', 'SKTO: nomor'], ['skto_tahun', 'SKTO: tahun'], ['skto_berlaku_sd', 'SKTO: berlaku s/d'], ['anggota_total', 'Jumlah total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas'], ['link_dokumentasi', 'Link dokumentasi'], ['link_instagram', 'Instagram'], ['link_youtube', 'YouTube'], ['link_tiktok', 'TikTok']];
 
 // Perubahan dari portal ormas yang menunggu verifikasi. Selama belum diverifikasi, katalog publik dan Google Drive tetap memakai data lama.
 function PendingPanel({ o, onDone }: { o: any; onDone: () => void }) {
