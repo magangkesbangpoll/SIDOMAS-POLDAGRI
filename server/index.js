@@ -691,13 +691,32 @@ app.post('/api/admin/ormas/:id/portal-reset', auth('manage_ormas'), (req, res) =
 // Berkas dan data disimpan sementara (data/pending + tabel pendaftaran_ormas). Baru setelah admin MENYETUJUI:
 // ormas dibuat, PDF + logo masuk Google Drive ke folder "Ormas-XXX - Nama Ormas", dan data tampil di katalog.
 const daftarLimiter = limiter({ limit: 5 });
+// Normalisasi nomor WhatsApp Indonesia: 0812.. / +62812.. / 812.. -> 62812..  (null bila tidak valid)
+const waNumber = (raw) => {
+  let n = String(raw || '').replace(/[^\d]/g, '');
+  if (n.startsWith('0')) n = '62' + n.slice(1); else if (n.startsWith('8')) n = '62' + n;
+  return /^62\d{8,13}$/.test(n) ? n : null;
+};
+// Kirim WhatsApp lewat gateway (bawaan: Fonnte). Diatur di .env: WA_TOKEN (+ opsional WA_API_URL). Tanpa WA_TOKEN fitur ini nonaktif.
+// Dijalankan di latar belakang: kegagalan hanya dicatat di terminal dan TIDAK membatalkan pendaftaran.
+const sendWA = async (to, message) => {
+  const token = process.env.WA_TOKEN, target = waNumber(to);
+  if (!token) return console.log('[WA] WA_TOKEN belum diisi, pesan WhatsApp tidak dikirim.');
+  if (!target) return console.log('[WA] Nomor tujuan tidak valid, pesan tidak dikirim.');
+  try {
+    const r = await fetch(process.env.WA_API_URL || 'https://api.fonnte.com/send', { method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' }, body: JSON.stringify({ target, message }), signal: AbortSignal.timeout(10000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.status === false) console.error('[WA] Gagal kirim:', r.status, j.reason || j.message || '');
+    else console.log('[WA] Terkirim ke', target.slice(0, 5) + '*****' + target.slice(-3));
+  } catch (e) { console.error('[WA] Gagal kirim:', e.message); }
+};
 app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
   const kid = db.prepare('select id from kategori order by urutan,id').get()?.id;
   const b = { ...req.body, kategori_id: kid };
   const logo = req.files?.logo?.[0], docs = uploadedDocs(req).filter(([j]) => j !== 'skto'); // pendaftar tidak mengunggah SKTO
   const kat = String(b.kategori_nama || '').trim().replace(/\s+/g, ' ');
   const err = !kid ? 'Sistem belum siap menerima pendaftaran' : !kat || kat.length > 100 ? 'Kategori wajib diisi (maks. 100 karakter)'
-    : validateOrmas(b) || (!String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
+    : validateOrmas(b) || (!waNumber(b.nomor_whatsapp_ketua) ? 'Nomor WhatsApp ketua wajib diisi dengan benar (contoh: 081234567890)' : !String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
   if (err) return fail(req, res, err);
   const nama = String(b.nama_ormas).trim();
   if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjuti'`).get(nama, nama))
@@ -713,6 +732,7 @@ app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
   notify({ jenis: 'admin', judul: `Pendaftaran ormas baru: ${nama}`, pesan: 'Ada ormas baru yang mendaftar. TINDAK LANJUTI!' });
   liveBroadcast(); // rute /public tidak memicu sinyal otomatis
   res.json({ ok: true });
+  sendWA(b.nomor_whatsapp_ketua, `Halo, ${nama}. Berkas Anda sudah kami terima. Selanjutnya akan kami tindak lanjuti. Mohon menunggu sampai konfirmasi dari kami. Terima kasih.`);
 });
 
 const pendCount = () => db.prepare(`select count(*) c from pendaftaran_ormas where status='tindaklanjuti'`).get().c;
