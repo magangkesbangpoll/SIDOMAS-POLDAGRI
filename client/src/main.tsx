@@ -1,7 +1,9 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
+import './inputfilter'; // filter input otomatis di semua form
 import { ToastProvider } from './ui';
 import { About, Catalog, Home, OrmasPublic, PublicLayout } from './pages/Public';
 import { AdminShell } from './pages/Admin';
