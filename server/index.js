@@ -1,3 +1,4 @@
+
 import ExcelJS from 'exceljs';
 import 'dotenv/config';
 import express from 'express';
@@ -17,6 +18,7 @@ import { db, DATA_DIR, SECRET, PERMS, getSetting as S, setSetting } from './db.j
 import { driveOn, driveUpload, driveDownload, driveDelete, driveOrganize, driveDeleteFolder } from './drive.js';
 import { backupDb } from './backup.js';
 import { setupFitur, notify, withExpiry, expiryInfo, dokKedaluwarsa, sessionAktif, cekKedaluwarsa } from './fitur.js';
+import { createHardening, passwordError, PW_MSG } from './hardening.js';
 
 try { dns.setDefaultResultOrder?.('ipv4first'); } catch {} // jaringan dengan IPv6 bermasalah tidak membuat koneksi ke Gmail/Drive macet
 
@@ -31,6 +33,8 @@ const retry = async (fn, jeda = [1500, 4000]) => {
 };
 // Server tidak boleh mati hanya karena satu proses latar belakang (email/Drive/backup) gagal
 process.on('unhandledRejection', (e) => console.error('Kesalahan latar belakang (diabaikan):', e?.message || e));
+// Penguatan keamanan: batas koneksi realtime, pencabutan token sesi, aturan password, batas WhatsApp (lihat hardening.js)
+const hd = createHardening({ db, jwt, secret: SECRET });
 const PORT = +process.env.PORT || 3001;
 const now = () => new Date().toISOString();
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
@@ -98,11 +102,13 @@ function log(req, jenis, ormasId, ringkasan, hasil = 'berhasil', who) {
 const notifAdmin = (req, judul, ormasId = null) => notify({ jenis: 'admin', judul, pesan: `Admin (${req.admin.username}) Telah Memperbarui, CEK SELENGKAPNYA!`, ormasId, actor: req.admin });
 
 // ---------- Auth ----------
+// Token sesi memuat jti (identitas, bisa dicabut saat logout) dan pv (berubah saat password berubah, sehingga sesi lama mati)
 function getAdmin(req) {
   try {
     const p = jwt.verify(req.cookies?.sid, SECRET);
+    if (hd.isRevoked(p.jti)) return null;
     const a = db.prepare('select a.*, r.nama_role, r.permissions from admin a join roles r on r.id=a.role_id where a.id=?').get(p.id);
-    if (!a || a.status_akun !== 'aktif') return null;
+    if (!a || a.status_akun !== 'aktif' || p.pv !== hd.pvOf(a.password_hash)) return null;
     a.perms = JSON.parse(a.permissions);
     return a;
   } catch { return null; }
@@ -114,7 +120,12 @@ const auth = (perm, allowMust = false) => (req, res, next) => {
   if (perm && !a.perms.includes(perm)) return res.status(403).json({ error: 'Anda tidak memiliki izin untuk tindakan ini' });
   req.admin = a; next();
 };
-const validPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <= 100 && p !== '123';
+// Aturan password: minimal 10 karakter, huruf besar + kecil + angka, tanpa pola umum, dan tidak memuat username/email (ctx)
+const validPassword = (p, ctx = []) => passwordError(p, ctx) === null;
+function setAdminCookie(res, a) {
+  const mins = +S('session_minutes') || 120;
+  res.cookie('sid', jwt.sign({ id: a.id, jti: hd.newJti(), pv: hd.pvOf(a.password_hash) }, SECRET, { expiresIn: mins * 60 }), { httpOnly: true, sameSite: 'strict', secure: process.env.COOKIE_SECURE === 'true', maxAge: mins * 60000 });
+}
 
 // ---------- Upload ----------
 const magicOk = (f) => {
@@ -193,9 +204,12 @@ app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 
 // --- Realtime (Server-Sent Events): beri sinyal ke semua browser tiap ada perubahan data ---
+// Dibatasi: maksimal 300 koneksi total dan 10 per alamat IP (lihat hardening.js) agar tidak bisa dipakai menghabiskan sumber daya server
 const liveClients = new Set();
 const liveBroadcast = () => { for (const r of liveClients) r.write(`event: tick\ndata: ${Date.now()}\n\n`); };
 app.get('/api/live', (req, res) => {
+  if (!hd.liveAllow(req, liveClients)) return res.status(429).json({ error: 'Terlalu banyak koneksi pembaruan otomatis' });
+  res.liveIp = req.ip;
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
   res.flushHeaders(); res.write('retry: 3000\n\n'); liveClients.add(res);
   req.on('close', () => liveClients.delete(res));
@@ -335,12 +349,12 @@ app.post('/api/auth/login', loginLimiter, (req, res) => {
   const pass = bcrypt.compareSync(String(password || '').slice(0, 100), a?.password_hash || DUMMY_HASH);
   if (!a || !pass || a.status_akun !== 'aktif') { log(req, 'login', null, 'Login gagal', 'gagal', { username: String(username || '').slice(0, 40) }); return res.status(401).json({ error: 'Username atau password salah' }); }
   db.prepare('update admin set last_login=? where id=?').run(now(), a.id);
-  const mins = +S('session_minutes') || 120;
-  res.cookie('sid', jwt.sign({ id: a.id }, SECRET, { expiresIn: mins * 60 }), { httpOnly: true, sameSite: 'strict', secure: process.env.COOKIE_SECURE === 'true', maxAge: mins * 60000 });
+  setAdminCookie(res, a);
   log(req, 'login', null, 'Login berhasil', 'berhasil', a);
   res.json({ ok: true, must_change: !!a.must_change });
 });
-app.post('/api/auth/logout', (req, res) => { const a = getAdmin(req); if (a) log(req, 'logout', null, 'Logout', 'berhasil', a); res.clearCookie('sid').json({ ok: true }); });
+// Logout mencabut token di server (bukan hanya menghapus cookie), jadi cookie yang sempat tersalin tidak bisa dipakai lagi
+app.post('/api/auth/logout', (req, res) => { const a = getAdmin(req); if (a) log(req, 'logout', null, 'Logout', 'berhasil', a); hd.revoke(req.cookies?.sid); res.clearCookie('sid').json({ ok: true }); });
 
 const smtpOn = () => !!process.env.SMTP_HOST;
 const appUrl = () => (process.env.APP_URL || (fs.existsSync(path.join(__dirname, '../client/dist')) ? `http://localhost:${PORT}` : 'http://localhost:5173')).replace(/\/$/, '');
@@ -383,15 +397,17 @@ app.post('/api/auth/forgot', forgotLimiter, (req, res) => {
 });
 app.post('/api/auth/reset', forgotLimiter, (req, res) => {
   const { token, password } = req.body || {};
-  if (!validPassword(password)) return res.status(400).json({ error: 'Password minimal 8 karakter dan tidak boleh "123"' });
+  if (!validPassword(password)) return res.status(400).json({ error: PW_MSG });
   const h = crypto.createHash('sha256').update(String(token || '')).digest('hex');
   const t = db.prepare('select * from reset_tokens where token_hash=? and used=0').get(h);
   if (!t || new Date(t.expires_at) < new Date()) return res.status(400).json({ error: 'Tautan tidak valid atau sudah kedaluwarsa' });
+  const target = db.prepare('select a.*,r.nama_role from admin a join roles r on r.id=a.role_id where a.id=?').get(t.admin_id);
+  if (!validPassword(password, [target?.username, target?.email])) return res.status(400).json({ error: PW_MSG });
   db.transaction(() => {
     db.prepare('update reset_tokens set used=1 where id=?').run(t.id);
     db.prepare('update admin set password_hash=?,must_change=0,updated_at=? where id=?').run(bcrypt.hashSync(password, 10), now(), t.admin_id);
   })();
-  log(null, 'ubah_password', null, 'Password diubah melalui pemulihan email', 'berhasil', db.prepare('select a.*,r.nama_role from admin a join roles r on r.id=a.role_id where a.id=?').get(t.admin_id));
+  log(null, 'ubah_password', null, 'Password diubah melalui pemulihan email', 'berhasil', target);
   res.json({ ok: true });
 });
 
@@ -407,7 +423,7 @@ function newPortalAccount(ormasId, kode) {
 }
 function getPortal(req) {
   try {
-    const p = jwt.verify(req.cookies?.oid, SECRET); if (p.scope !== 'portal') return null;
+    const p = jwt.verify(req.cookies?.oid, SECRET); if (p.scope !== 'portal' || hd.isRevoked(p.jti)) return null;
     const akun = db.prepare('select * from akun_ormas where ormas_id=?').get(p.o);
     const ormas = db.prepare('select * from ormas where id=?').get(p.o);
     if (!akun || !ormas || akun.password_hash.slice(-16) !== p.pv) return null; // sesi lama mati jika password berubah
@@ -423,7 +439,7 @@ const portalAuth = (allowMust = false) => (req, res, next) => {
 const portalWho = (s) => ({ username: s.akun.username, nama_role: 'Ormas' });
 function setPortalCookie(res, akun) {
   const mins = +S('session_minutes') || 120;
-  res.cookie('oid', jwt.sign({ o: akun.ormas_id, scope: 'portal', pv: akun.password_hash.slice(-16) }, SECRET, { expiresIn: mins * 60 }), { httpOnly: true, sameSite: 'strict', secure: process.env.COOKIE_SECURE === 'true', maxAge: mins * 60000 });
+  res.cookie('oid', jwt.sign({ o: akun.ormas_id, scope: 'portal', jti: hd.newJti(), pv: akun.password_hash.slice(-16) }, SECRET, { expiresIn: mins * 60 }), { httpOnly: true, sameSite: 'strict', secure: process.env.COOKIE_SECURE === 'true', maxAge: mins * 60000 });
 }
 
 app.post('/api/portal/login', portalLimiter, (req, res) => {
@@ -436,7 +452,7 @@ app.post('/api/portal/login', portalLimiter, (req, res) => {
   log(req, 'login_ormas', akun.ormas_id, 'Login ormas berhasil', 'berhasil', { username: akun.username, nama_role: 'Ormas' });
   res.json({ ok: true, must_change: !!akun.must_change });
 });
-app.post('/api/portal/logout', (req, res) => res.clearCookie('oid').json({ ok: true }));
+app.post('/api/portal/logout', (req, res) => { hd.revoke(req.cookies?.oid); res.clearCookie('oid').json({ ok: true }); });
 
 const pendingOf = (ormasId) => {
   const r = db.prepare('select * from perubahan_ormas where ormas_id=?').get(ormasId);
@@ -466,7 +482,8 @@ app.post('/api/portal/change-password', portalAuth(true), (req, res) => {
   const { old_password, new_password } = req.body || {};
   const { akun } = req.portal;
   if (!bcrypt.compareSync(String(old_password || ''), akun.password_hash)) return res.status(400).json({ error: 'Password lama salah' });
-  if (!validPassword(new_password) || new_password === old_password) return res.status(400).json({ error: 'Password baru minimal 8 karakter, berbeda dari password lama, dan bukan "123"' });
+  if (new_password === old_password) return res.status(400).json({ error: 'Password baru harus berbeda dari password lama' });
+  if (!validPassword(new_password, [akun.username])) return res.status(400).json({ error: PW_MSG });
   db.prepare('update akun_ormas set password_hash=?,must_change=0,updated_at=? where ormas_id=?').run(bcrypt.hashSync(new_password, 10), now(), akun.ormas_id);
   setPortalCookie(res, db.prepare('select * from akun_ormas where ormas_id=?').get(akun.ormas_id));
   log(req, 'ubah_password_ormas', akun.ormas_id, 'Ormas mengubah password portal', 'berhasil', portalWho(req.portal));
@@ -542,14 +559,16 @@ app.post('/api/portal/forgot', forgotLimiter, (req, res) => {
 });
 app.post('/api/portal/reset', forgotLimiter, (req, res) => {
   const { token, password } = req.body || {};
-  if (!validPassword(password)) return res.status(400).json({ error: 'Password minimal 8 karakter dan tidak boleh "123"' });
+  if (!validPassword(password)) return res.status(400).json({ error: PW_MSG });
   const t = db.prepare('select * from reset_tokens_ormas where token_hash=? and used=0').get(crypto.createHash('sha256').update(String(token || '')).digest('hex'));
   if (!t || new Date(t.expires_at) < new Date()) return res.status(400).json({ error: 'Tautan tidak valid atau sudah kedaluwarsa' });
+  const uname = db.prepare('select username from akun_ormas where ormas_id=?').get(t.ormas_id)?.username;
+  if (!validPassword(password, [uname])) return res.status(400).json({ error: PW_MSG });
   db.transaction(() => {
     db.prepare('update reset_tokens_ormas set used=1 where id=?').run(t.id);
     db.prepare('update akun_ormas set password_hash=?,must_change=0,updated_at=? where ormas_id=?').run(bcrypt.hashSync(password, 10), now(), t.ormas_id);
   })();
-  log(null, 'ubah_password_ormas', t.ormas_id, 'Password portal diubah lewat pemulihan email', 'berhasil', { username: db.prepare('select username from akun_ormas where ormas_id=?').get(t.ormas_id)?.username, nama_role: 'Ormas' });
+  log(null, 'ubah_password_ormas', t.ormas_id, 'Password portal diubah lewat pemulihan email', 'berhasil', { username: uname, nama_role: 'Ormas' });
   res.json({ ok: true });
 });
 
@@ -562,9 +581,11 @@ app.post('/api/admin/change-password', auth(null, true), (req, res) => {
   if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return res.status(400).json({ error: 'Email tidak valid' });
   if (req.admin.email.endsWith('@sidomas.local') && !em) return res.status(400).json({ error: 'Isi email aktif Anda agar fitur lupa password bisa mengirim tautan' });
   if (!bcrypt.compareSync(String(old_password || ''), req.admin.password_hash)) return res.status(400).json({ error: 'Password lama salah' });
-  if (!validPassword(new_password) || new_password === old_password) return res.status(400).json({ error: 'Password baru minimal 8 karakter, berbeda dari password lama, dan bukan "123"' });
+  if (new_password === old_password) return res.status(400).json({ error: 'Password baru harus berbeda dari password lama' });
+  if (!validPassword(new_password, [req.admin.username, em || req.admin.email])) return res.status(400).json({ error: PW_MSG });
   if (em) { try { db.prepare('update admin set email=? where id=?').run(em, req.admin.id); } catch { return res.status(400).json({ error: 'Email sudah dipakai akun lain' }); } }
   db.prepare('update admin set password_hash=?,must_change=0,updated_at=? where id=?').run(bcrypt.hashSync(new_password, 10), now(), req.admin.id);
+  setAdminCookie(res, db.prepare('select * from admin where id=?').get(req.admin.id)); // sesi lama mati karena password berubah; sesi ini diperbarui
   log(req, 'ubah_password', null, 'Mengubah password sendiri');
   res.json({ ok: true });
 });
@@ -718,10 +739,12 @@ const waNumber = (raw) => {
 };
 // Kirim WhatsApp lewat gateway (bawaan: Fonnte). Diatur di .env: WA_TOKEN (+ opsional WA_API_URL). Tanpa WA_TOKEN fitur ini nonaktif.
 // Dijalankan di latar belakang: kegagalan hanya dicatat di terminal dan TIDAK membatalkan pendaftaran.
+// Dibatasi (hardening.js): satu nomor hanya menerima satu pesan per 24 jam dan total per hari dibatasi (WA_DAILY_MAX, bawaan 100).
 const sendWA = async (to, message) => {
   const token = process.env.WA_TOKEN, target = waNumber(to);
   if (!token) return console.log('[WA] WA_TOKEN belum diisi, pesan WhatsApp tidak dikirim.');
   if (!target) return console.log('[WA] Nomor tujuan tidak valid, pesan tidak dikirim.');
+  if (!hd.waAllow(target)) return console.log('[WA] Dilewati: nomor ini sudah menerima pesan dalam 24 jam terakhir atau batas harian tercapai.');
   try {
     const r = await fetch(process.env.WA_API_URL || 'https://api.fonnte.com/send', { method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' }, body: JSON.stringify({ target, message }), signal: AbortSignal.timeout(10000) });
     const j = await r.json().catch(() => ({}));
@@ -738,7 +761,7 @@ app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
     : validateOrmas(b) || (!waNumber(b.nomor_whatsapp_ketua) ? 'Nomor WhatsApp ketua wajib diisi dengan benar (contoh: 081234567890)' : !String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
   if (err) return fail(req, res, err);
   const nama = String(b.nama_ormas).trim();
-  if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjuti'`).get(nama, nama))
+  if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjut'`).get(nama, nama))
     return fail(req, res, 'Ormas dengan nama ini sudah terdaftar atau sedang diproses', 409);
   const { kategori_id, status_dokumen, status_operasional, status_publikasi, ...data } = rowOf(b, {});
   const t = now();
@@ -1025,7 +1048,7 @@ const validAcc = (b, creating) => {
   if (creating && !/^[a-zA-Z0-9._-]{3,30}$/.test(b.username || '')) return 'Username 3-30 karakter (huruf, angka, titik, strip, garis bawah)';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.email || '')) return 'Email tidak valid';
   if (!db.prepare('select 1 from roles where id=?').get(+b.role_id)) return 'Role tidak valid';
-  if ((creating || b.password) && !validPassword(b.password)) return 'Password minimal 8 karakter dan bukan "123"';
+  if ((creating || b.password) && !validPassword(b.password, [b.username, b.email])) return PW_MSG;
   return null;
 };
 app.post('/api/admin/accounts', auth('manage_admins'), (req, res) => {
@@ -1038,7 +1061,7 @@ app.post('/api/admin/accounts', auth('manage_admins'), (req, res) => {
 app.put('/api/admin/accounts/:id', auth('manage_admins'), (req, res) => {
   const id = +req.params.id, b = req.body || {}, t = db.prepare('select a.*,r.permissions from admin a join roles r on r.id=a.role_id where a.id=?').get(id);
   if (!t) return res.status(404).json({ error: 'Akun tidak ditemukan' });
-  const err = validAcc(b, false); if (err) return res.status(400).json({ error: err });
+  const err = validAcc({ ...b, username: t.username }, false); if (err) return res.status(400).json({ error: err });
   const status = b.status_akun === 'nonaktif' ? 'nonaktif' : 'aktif';
   const newSuper = JSON.parse(db.prepare('select permissions from roles where id=?').get(+b.role_id).permissions).includes('manage_admins');
   if (JSON.parse(t.permissions).includes('manage_admins') && t.status_akun === 'aktif' && (!newSuper || status !== 'aktif') && superCount(id) === 0)
@@ -1141,6 +1164,7 @@ if (driveOn()) {
 }
 ensureAll();
 setInterval(ensureAll, 60 * 60 * 1000); // scheduler; lazy rotation tetap berlaku sebagai cadangan
+hd.purge(); setInterval(() => hd.purge(), 3600 * 1000).unref(); // bersihkan catatan token dicabut dan batas WhatsApp yang sudah lewat
 setTimeout(cekKedaluwarsa, 20 * 1000); // pengingat SKTO / legal standing yang hampir atau sudah kedaluwarsa
 setInterval(cekKedaluwarsa, 6 * 3600 * 1000);
 app.listen(PORT, () => console.log(`SIDOMAS server berjalan di http://localhost:${PORT} [versi: v2 anggota + dokumentasi + notifikasi + kedaluwarsa + sesi-PDF]`));
