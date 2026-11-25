@@ -185,3 +185,41 @@ export function LinkInputs({ f, set }: { f: any; set: (k: string, v: any) => voi
     </>
   );
 }
+
+// ---------- Company Profile: panduan isi + status kelengkapan ----------
+export const CP_PARTS: [string, string][] = [['deskripsi', 'Deskripsi singkat ormas'], ['visi', 'Visi'], ['misi', 'Misi'], ['legal', 'Legal Standing'], ['bidang', 'Cakupan kegiatan / bidang'], ['dana', 'Sumber dana'], ['anggota', 'Profil anggota (kelompok perempuan, lansia, dan disabilitas)'], ['pengurus', 'Susunan pengurus'], ['program', 'Program kegiatan']];
+export function CompanyProfileGuide({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 md:col-span-2">
+      <p className="font-semibold">Panduan pengisian Company Profile</p>
+      <p className="mt-0.5 text-xs">Company Profile (PDF / PPT / PPTX) wajib memuat bagian berikut:</p>
+      <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-xs">{CP_PARTS.map(([k, l]) => <li key={k}>{l}</li>)}</ol>
+      {!compact && <p className="mt-2 text-xs">Company Profile tampil terbuka untuk umum di katalog (tanpa username dan password). Ormas dapat memperbarui Company Profile kapan saja lewat halaman ormas setelah login. Pembaruan diperiksa admin lebih dulu sebelum tampil di katalog.</p>}
+    </div>
+  );
+}
+export function CpChecklist({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const sel = new Set(String(value || '').split(',').filter(Boolean));
+  const toggle = (k: string) => { const n = new Set(sel); if (n.has(k)) n.delete(k); else n.add(k); onChange(CP_PARTS.map(([x]) => x).filter((x) => n.has(x)).join(',')); };
+  return (
+    <fieldset className="rounded-md border border-slate-200 p-3 md:col-span-2">
+      <legend className="px-1 text-sm font-semibold">Bagian yang sudah ada di Company Profile Anda <span className="ml-1 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">Opsional</span></legend>
+      <div className="grid gap-1 sm:grid-cols-2">{CP_PARTS.map(([k, l]) => <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sel.has(k)} onChange={() => toggle(k)} />{l}</label>)}</div>
+      <p className="mt-1 text-xs text-slate-500">Centang bagian yang sudah dimuat di berkas Company Profile. Centang ini menentukan status kelengkapan.</p>
+    </fieldset>
+  );
+}
+export function cpStatus(cpBagian: string, hasFile: boolean) {
+  const sel = new Set(String(cpBagian || '').split(',').filter(Boolean));
+  const missing = CP_PARTS.filter(([k]) => !sel.has(k)).map(([, l]) => l);
+  return { done: CP_PARTS.length - missing.length, total: CP_PARTS.length, missing, hasFile, lengkap: hasFile && !missing.length };
+}
+export function CpStatus({ cpBagian, hasFile }: { cpBagian: string; hasFile: boolean }) {
+  const s = cpStatus(cpBagian, hasFile);
+  return (
+    <div className="text-xs">
+      <span className={`rounded px-2 py-0.5 font-bold ${s.lengkap ? 'bg-green-100 text-green-800' : s.hasFile ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>{!s.hasFile ? 'Belum diunggah' : s.lengkap ? `Lengkap (${s.done}/${s.total} bagian)` : `Belum lengkap (${s.done}/${s.total} bagian)`}</span>
+      {s.hasFile && s.missing.length > 0 && <p className="mt-1 text-amber-800">Belum diisi: {s.missing.join(', ')}</p>}
+    </div>
+  );
+}

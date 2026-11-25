@@ -1,5 +1,12 @@
+import { findBad } from './inputfilter';
 export interface ApiError extends Error { status: number; code?: string }
 export async function api<T = any>(path: string, opts: { method?: string; body?: any; form?: FormData } = {}): Promise<T> {
+  // Filter input di browser: tolak pola XSS / SQL injection sebelum dikirim
+  let hit: ReturnType<typeof findBad> = null;
+  if (opts.form) { for (const [k, v] of opts.form.entries()) if (typeof v === 'string' && (hit = findBad(v, k))) break; }
+  else hit = findBad(opts.body);
+  if (!hit && path.includes('?')) { const q: Record<string, string> = {}; new URLSearchParams(path.split('?')[1]).forEach((v, k) => { q[k] = v; }); hit = findBad(q); }
+  if (hit) throw Object.assign(new Error(`Input pada kolom "${hit.key}" ditolak karena mengandung ${hit.why} yang tidak diperbolehkan. Hapus karakter tersebut lalu coba lagi.`), { status: 400 }) as ApiError;
   const r = await fetch('/api' + path, {
     method: opts.method || (opts.body || opts.form ? 'POST' : 'GET'),
     credentials: 'include',
