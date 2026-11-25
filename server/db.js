@@ -62,7 +62,7 @@ create index if not exists idx_log_waktu on log_aktivitas(waktu_aktivitas);
 
 // Migrasi untuk database yang dibuat sebelum kolom kontak ditambahkan
 const cols = db.prepare('pragma table_info(ormas)').all().map((c) => c.name);
-for (const c of ['nomor_whatsapp_ketua', 'alamat', 'email_ormas', 'sekretaris', 'bendahara', 'kemantren', 'bentuk', 'bidang_kegiatan', 'legal_jenis', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'validasi', 'catatan_penolakan', 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'])
+for (const c of ['nomor_whatsapp_ketua', 'alamat', 'email_ormas', 'sekretaris', 'bendahara', 'kemantren', 'bentuk', 'bidang_kegiatan', 'legal_jenis', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'validasi', 'catatan_penolakan', 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'])
   if (!cols.includes(c)) db.exec(`alter table ormas add column ${c} text`);
 // Jumlah anggota (hanya angka, tanpa nama)
 for (const c of ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas', 'anggota_total'])

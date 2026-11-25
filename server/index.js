@@ -1,4 +1,5 @@
 
+import { findBad } from './inputfilter.js';
 import ExcelJS from 'exceljs';
 import 'dotenv/config';
 import express from 'express';
@@ -139,6 +140,11 @@ const allUploaded = (req) => Object.values(req.files || {}).flat();
 const isDrive = (k) => String(k || '').startsWith('gd:'); // storage_key 'gd:<id>' = tersimpan di Google Drive
 const cleanup = (req) => allUploaded(req).forEach((f) => (isDrive(f.filename) ? driveDelete(f.filename.slice(3)) : fs.rm(f.path, { force: true }, () => {})));
 const fail = (req, res, msg, code = 400) => { cleanup(req); return res.status(code).json({ error: msg }); };
+// Filter input: input yang mengandung pola XSS / SQL injection ditolak dan dicatat di Log Aktivitas (isi input TIDAK dicatat)
+const blocked = (req, res, hit) => {
+  try { log(req, 'input_diblokir', null, `Input ditolak (${hit.why}) pada kolom "${hit.key}" - ${req.method} ${req.path}`, 'ditolak'); } catch {}
+  return fail(req, res, `Input pada kolom "${hit.key}" ditolak karena mengandung ${hit.why} yang tidak diperbolehkan. Hapus karakter tersebut lalu coba lagi.`);
+};
 const unlink = (dir, key) => key && fs.rm(path.join(dir, path.basename(key)), { force: true }, () => {});
 const removeStored = (key, pending = false) => (isDrive(key) ? driveDelete(key.slice(3)) : unlink(pending ? PENDING : FILES, key));
 const logoCache = new Map(); // cache logo dari Google Drive agar halaman katalog tetap cepat
@@ -173,6 +179,8 @@ const makeUpload = (toPending) => (req, res, next) => {
     if (err) { cleanup(req); return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `Ukuran file melebihi batas ${S('max_pdf_mb')} MB` : err.message }); }
     const bad = allUploaded(req).find((f) => !magicOk(f));
     if (bad) return fail(req, res, `File "${cleanName(bad.originalname)}" bukan berkas yang valid`);
+    const hit = findBad(req.body); // filter input untuk form multipart
+    if (hit) return blocked(req, res, hit);
     next();
   });
 };
@@ -202,6 +210,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', +process.env.TRUST_PROXY || 
 app.use(helmet({ contentSecurityPolicy: { directives: { ...helmet.contentSecurityPolicy.getDefaultDirectives(), 'frame-src': ["'self'", 'https://www.google.com', 'https://maps.google.com'] } } }));
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
+app.use('/api', (req, res, next) => { const hit = findBad(req.body) || findBad(req.query); return hit ? blocked(req, res, hit) : next(); }); // filter input: JSON + query string
 
 // --- Realtime (Server-Sent Events): beri sinyal ke semua browser tiap ada perubahan data ---
 // Dibatasi: maksimal 300 koneksi total dan 10 per alamat IP (lihat hardening.js) agar tidak bisa dipakai menghabiskan sumber daya server
@@ -259,7 +268,7 @@ app.get('/api/public/ormas', (req, res) => {
 });
 
 app.get('/api/public/ormas/:kode', (req, res) => {
-  const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.link_youtube,o.link_tiktok,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
+  const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.link_youtube,o.link_tiktok,o.cp_bagian,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
   if (!o || S('catalog_public') !== 'true') return res.status(404).json({ error: 'Data ormas tidak ditemukan' });
   o.docs = db.prepare(`select id,jenis_dokumen,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and klasifikasi_akses='kredensial' and jenis_dokumen is not null and pending=0 order by id`).all(o.id);
   o.company_profile = db.prepare(`select id,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and jenis_dokumen='company_profile' and pending=0 order by id desc limit 1`).get(o.id) || null;
@@ -413,7 +422,7 @@ app.post('/api/auth/reset', forgotLimiter, (req, res) => {
 
 // ===== Portal ormas: akun TETAP milik ormas (terpisah dari kredensial harian PDF) =====
 const portalLimiter = limiter();
-const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'];
+const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 const portalUser = (kode) => kode.toLowerCase().replace('-', '');
 function newPortalAccount(ormasId, kode) {
   const password = rnd(10), username = portalUser(kode);
@@ -607,7 +616,7 @@ app.get('/api/admin/dashboard', auth('view_ormas'), (req, res) => {
 });
 
 // --- Data ormas ---
-const TEXT_FIELDS = { nama_ketua: 150, sekretaris: 150, bendahara: 150, nomor_whatsapp_ketua: 25, email_ormas: 120, alamat: 500, bentuk: 100, bidang_kegiatan: 300, legal_jenis: 100, nomor_sk: 100, legal_tahun: 4, legal_berlaku_sd: 50, skto_nomor: 100, skto_tahun: 4, skto_berlaku_sd: 50, validasi: 100, catatan_verifikasi: 1000, link_dokumentasi: 500, link_instagram: 200, link_youtube: 200, link_tiktok: 200 };
+const TEXT_FIELDS = { nama_ketua: 150, sekretaris: 150, bendahara: 150, nomor_whatsapp_ketua: 25, email_ormas: 120, alamat: 500, bentuk: 100, bidang_kegiatan: 300, legal_jenis: 100, nomor_sk: 100, legal_tahun: 4, legal_berlaku_sd: 50, skto_nomor: 100, skto_tahun: 4, skto_berlaku_sd: 50, validasi: 100, catatan_verifikasi: 1000, link_dokumentasi: 500, link_instagram: 200, link_youtube: 200, link_tiktok: 200, cp_bagian: 200 };
 function validateOrmas(b) {
   const nama = String(b.nama_ormas || '').trim();
   if (!nama) return 'Nama ormas wajib diisi';
@@ -634,6 +643,7 @@ function validateOrmas(b) {
   if (ld && !urlOk(ld)) return 'Link dokumentasi harus berupa tautan yang diawali http:// atau https://';
   const ig = igUrl(b.link_instagram);
   if (ig && !(urlOk(ig) && /(^|\.)instagram\.com$/i.test(new URL(ig).hostname))) return 'Link Instagram tidak valid (contoh: https://instagram.com/namaormas atau @namaormas)';
+  if (String(b.cp_bagian || '') && String(b.cp_bagian).split(',').some((x) => !['deskripsi', 'visi', 'misi', 'legal', 'bidang', 'dana', 'anggota', 'pengurus', 'program'].includes(x))) return 'Pilihan bagian Company Profile tidak valid';
   for (const [k, re, nm] of [['link_youtube', /(^|\.)(youtube\.com|youtu\.be)$/i, 'YouTube'], ['link_tiktok', /(^|\.)tiktok\.com$/i, 'TikTok']]) {
     const v = String(b[k] || '').trim();
     if (v && !(urlOk(v) && re.test(new URL(v).hostname))) return `Link ${nm} tidak valid (contoh: https://${nm === 'YouTube' ? 'youtube.com/@namaormas' : 'tiktok.com/@namaormas'})`;
@@ -757,6 +767,11 @@ app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
   const b = { ...req.body, kategori_id: kid };
   const logo = req.files?.logo?.[0], docs = uploadedDocs(req).filter(([j]) => j !== 'skto'); // pendaftar tidak mengunggah SKTO
   const kat = String(b.kategori_nama || '').trim().replace(/\s+/g, ' ');
+  // Ketentuan pendaftaran: logo PNG/JPG/JPEG maks. 1 MB, semua kolom wajib terisi, AD/ART dan Company Profile wajib diunggah
+  const kosong = [['bentuk', 'Bentuk ormas'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['email_ormas', 'Email ormas'], ['anggota_total', 'Total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas']].find(([k]) => !String(b[k] ?? '').trim());
+  const err0 = !logo ? 'Logo ormas wajib diunggah' : !['image/png', 'image/jpeg'].includes(logo.mimetype) ? 'Logo harus berformat PNG, JPG, atau JPEG' : logo.size > 1048576 ? 'Ukuran logo maksimal 1 MB'
+    : kosong ? `${kosong[1]} wajib diisi` : !docs.some(([j]) => j === 'adart') ? 'Dokumen AD/ART wajib diunggah' : !docs.some(([j]) => j === 'company_profile') ? 'Company Profile wajib diunggah' : null;
+  if (err0) return fail(req, res, err0);
   const err = !kid ? 'Sistem belum siap menerima pendaftaran' : !kat || kat.length > 100 ? 'Kategori wajib diisi (maks. 100 karakter)'
     : validateOrmas(b) || (!waNumber(b.nomor_whatsapp_ketua) ? 'Nomor WhatsApp ketua wajib diisi dengan benar (contoh: 081234567890)' : !String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
   if (err) return fail(req, res, err);
