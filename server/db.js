@@ -71,6 +71,49 @@ if (!db.prepare('pragma table_info(dokumen_ormas)').all().some((c) => c.name ===
 // pending=1: PDF kiriman ormas yang menunggu verifikasi (belum tampil di katalog, belum masuk Google Drive)
 if (!db.prepare('pragma table_info(dokumen_ormas)').all().some((c) => c.name === 'pending')) db.exec('alter table dokumen_ormas add column pending integer not null default 0');
 
+// ---- Revisi Batch 4 (Legal Standing) dan Batch 5 (kontak) ----
+// legal_status: 'ya' (memiliki Legal Standing), 'tidak' (belum memiliki), '' (belum ditentukan).
+// telepon_ormas: nomor kontak resmi organisasi, terpisah dari nomor pribadi ketua (kolom nomor_whatsapp_ketua tetap dipakai untuk ketua).
+for (const c of ['legal_status', 'telepon_ormas'])
+  if (!cols.includes(c)) db.exec(`alter table ormas add column ${c} text`);
+// Data lama yang sudah punya isian Legal Standing otomatis dianggap "ya"; sisanya dibiarkan belum ditentukan agar admin/ormas yang mengonfirmasi.
+db.exec(`update ormas set legal_status='ya' where coalesce(legal_status,'')='' and (coalesce(legal_jenis,'')!='' or coalesce(nomor_sk,'')!='' or coalesce(legal_tahun,'')!='' or coalesce(legal_berlaku_sd,'')!='')`);
+
+// ---- Revisi Batch 6 (dashboard ormas): notifikasi untuk ormas ----
+// kategori: Information | Warning | Required Action. 'kunci' mencegah pengingat yang sama dibuat dua kali untuk satu ormas.
+db.exec(`
+create table if not exists notifikasi_ormas(id integer primary key autoincrement, ormas_id integer not null references ormas(id) on delete cascade, kategori text not null default 'Information', jenis text not null, judul text not null, pesan text not null, kunci text, dibaca integer not null default 0, created_at text not null, unique(ormas_id, kunci));
+create index if not exists idx_notif_ormas on notifikasi_ormas(ormas_id, dibaca);
+-- Pengumuman SIDOMAS dari admin untuk semua ormas
+create table if not exists pengumuman(id integer primary key autoincrement, kategori text not null default 'Information', judul text not null, pesan text not null, aktif integer not null default 1, created_by integer references admin(id) on delete set null, created_at text not null);
+`);
+
+// ---- Revisi Batch 7 (laporan kegiatan tahunan) ----
+// Satu laporan per ormas per tahun. Laporan yang sudah dikirim tetap tersimpan sebagai arsip.
+// status: 'draft' (masih disusun) | 'dikirim' (sudah dikirim ke admin).
+db.exec(`
+create table if not exists laporan_tahunan(
+  id integer primary key autoincrement,
+  ormas_id integer not null references ormas(id) on delete cascade,
+  tahun integer not null,
+  rencana_program text,
+  pelaksanaan_kegiatan text,
+  biaya_kegiatan integer,
+  sumber_dana text,
+  dokumentasi_link text,
+  dokumentasi_key text,
+  dokumentasi_nama text,
+  penutup text,
+  status text not null default 'draft',
+  catatan_admin text,
+  dikirim_at text,
+  created_at text not null,
+  updated_at text not null,
+  unique(ormas_id, tahun)
+);
+create index if not exists idx_laporan_tahun on laporan_tahunan(tahun, status);
+`);
+
 // "Validasi" sekarang berupa pilihan: Terdata / Terdaftar / Teregister. Isian teks lama yang tidak cocok dikosongkan.
 db.exec(`update ormas set validasi=case lower(trim(validasi)) when 'terdata' then 'Terdata' when 'terdaftar' then 'Terdaftar' when 'teregister' then 'Teregister' else '' end where validasi is not null and validasi not in ('','Terdata','Terdaftar','Teregister')`);
 
