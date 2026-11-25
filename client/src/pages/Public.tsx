@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Building2, Download, ExternalLink, FileText, Link2, Lock, Mail, MapPin, MessageCircle, Search, ShieldCheck, Users } from 'lucide-react';
 import { api } from '../api';
-import { ADART, Badge, DOC_STATUS, DOC_TYPES, DOKUMENTASI, Empty, InstagramIcon, nf, rincian, ErrorBox, Modal, Pager, fmtDate, fmtSize, qs, useDebounced, useFetch } from '../ui';
+import { ADART, Badge, CompanyProfileGuide, CpStatus, DOC_STATUS, DOC_TYPES, DOKUMENTASI, Empty, InstagramIcon, nf, rincian, ErrorBox, Modal, Pager, fmtDate, fmtSize, qs, useDebounced, useFetch } from '../ui';
 
 export const useMeta = () => useFetch<any>('/public/meta');
 const waNumber = (n: string) => n.replace(/\D/g, '').replace(/^0/, '62'); // 0812... -> 62812... untuk tautan wa.me
@@ -199,6 +199,8 @@ export function OrmasPublic() {
             <div className="flex flex-wrap items-center gap-3 text-sm"><FileText className="text-red-600" /><span>{o.company_profile.nama_file} · {fmtSize(o.company_profile.ukuran_file)}</span>
               <a className="btn-p" target="_blank" rel="noopener noreferrer" href={`/api/public/ormas/${o.kode_ormas}/company-profile`}><ExternalLink size={15} /> Lihat</a>
               <a className="btn-o" href={`/api/public/ormas/${o.kode_ormas}/company-profile?dl=1`}><Download size={15} /> Unduh</a></div>
+            <div className="mt-2"><CpStatus cpBagian={o.cp_bagian} hasFile /></div>
+            <details className="mt-2 text-xs"><summary className="cursor-pointer font-semibold text-navy-700">Bagian yang wajib ada di Company Profile</summary><div className="mt-1 grid"><CompanyProfileGuide compact /></div></details>
             <p className="mt-1 text-xs text-slate-500">Terbuka untuk umum, tanpa username dan password. File PPT/PPTX akan terunduh.</p></div>}
           <div className="card p-5"><h2 className="mb-2 font-serif text-lg font-bold text-navy-900">Kontak</h2>
             <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">

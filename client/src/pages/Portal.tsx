@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, ExternalLink, KeyRound, LogOut, Save, Upload } from 'lucide-react';
 import { api } from '../api';
-import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, ADART, COMPANY_PROFILE, DOKUMENTASI, docAccept, docTypeOk, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
+import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, ADART, COMPANY_PROFILE, CompanyProfileGuide, CpChecklist, CpStatus, DOKUMENTASI, docAccept, docTypeOk, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
 import { ChangePassword, PasswordInput, Shell } from './AdminAuth';
 
 export function PortalLogin() {
@@ -50,7 +50,7 @@ export function PortalReset() {
   );
 }
 
-const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok'];
+const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 
 export function PortalHome() {
   const nav = useNavigate(); const toast = useToast();
@@ -149,6 +149,9 @@ export function PortalHome() {
               <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}){cur.pending && ' · menunggu verifikasi'}</> : 'Belum diunggah'}</p>
             </div>); })}
         </div>
+        <CompanyProfileGuide />
+        <div className="md:col-span-2"><CpStatus cpBagian={f.cp_bagian} hasFile={me.docs.some((d: any) => d.jenis_dokumen === 'company_profile')} /></div>
+        <CpChecklist value={f.cp_bagian ?? ''} onChange={(v) => set('cp_bagian', v)} />
         {H('Tautan Dokumentasi dan Media Sosial (opsional)')}
           <LinkInputs f={f} set={set} />
 
