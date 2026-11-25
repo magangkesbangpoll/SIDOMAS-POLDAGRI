@@ -12,7 +12,7 @@ const Tag = ({ wajib }: { wajib: boolean }) => <span className={`ml-2 rounded px
 // Pendaftaran ormas baru (publik). Setiap kolom diberi label "Wajib diisi" atau "Opsional".
 export function Daftar() {
   const toast = useToast(); const { data: meta } = useFetch<any>('/public/meta');
-  const [nama, setNama] = useState(''); const [kat, setKat] = useState(''); const [bp, setBp] = useState(''); const [bl, setBl] = useState('');
+  const [kat, setKat] = useState(''); const [bp, setBp] = useState(''); const [bl, setBl] = useState('');
   const [f, setF] = useState<any>(Object.fromEntries(KEYS.map((k) => [k, ''])));
   const [logo, setLogo] = useState<File | null>(null); const [logoUrl, setLogoUrl] = useState(''); const [logoWarn, setLogoWarn] = useState<string[]>([]);
   const [files, setFiles] = useState<Record<string, File>>({});
@@ -59,7 +59,7 @@ export function Daftar() {
     if (!files.company_profile) return toast('Company Profile wajib diunggah', false);
     const tot = +f.anggota_total; if (['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'].some((k) => +f[k] > tot)) return toast('Jumlah perempuan, lansia, dan disabilitas tidak boleh lebih besar dari total anggota', false);
     setBusy(true);
-    const fd = new FormData(); fd.append('nama_ormas', nama); fd.append('kategori_nama', kat); fd.append('bentuk', bentuk);
+    const fd = new FormData(); fd.append('nama_ormas', String(f.nama_ormas ?? '').trim()); fd.append('kategori_nama', kat); fd.append('bentuk', bentuk);
     KEYS.forEach((k) => fd.append(k, String(f[k] ?? ''))); Object.entries(files).forEach(([j, x]) => fd.append(j, x)); fd.append('logo', logo);
     try { await api('/public/daftar', { method: 'POST', form: fd }); setDone(true); window.scrollTo(0, 0); } catch (x: any) { toast(x.message, false); } finally { setBusy(false); }
   };
