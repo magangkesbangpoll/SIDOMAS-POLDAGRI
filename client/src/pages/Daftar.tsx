@@ -9,7 +9,7 @@ const MEM: [string, string][] = [['anggota_total', 'Total anggota'], ['anggota_p
 const KEYS = ['bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', ...MEM.map(([k]) => k), 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 const Tag = ({ wajib }: { wajib: boolean }) => <span className={`chip ml-2 align-middle !text-[10px] uppercase ${wajib ? 'text-bad' : 'text-muted'}`}>{wajib ? 'Wajib diisi' : 'Opsional'}</span>;
 
-// Pendaftaran ormas baru (publik). Setiap kolom diberi label "Wajib diisi" atau "Opsional".
+// Pendaftaran ormas baru (publik). Label "Wajib diisi" atau "Opsional" ditampilkan di judul tiap kategori.
 export function Daftar() {
   const toast = useToast(); const { data: meta } = useFetch<any>('/public/meta');
   const [kat, setKat] = useState(''); const [bp, setBp] = useState(''); const [bl, setBl] = useState('');
@@ -19,7 +19,7 @@ export function Daftar() {
   const [busy, setBusy] = useState(false); const [done, setDone] = useState(false);
   const maxMb = meta?.max_pdf_mb || 20;
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
-  const T = (k: string, label: string, o: any = {}) => <div className={o.span ? 'md:col-span-2' : ''}><label className="lbl" htmlFor={k}>{label}<Tag wajib={!!o.req} /></label><input id={k} type={o.type || 'text'} className="inp" placeholder={o.ph} maxLength={o.max} required={o.req} value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></div>;
+  const T = (k: string, label: string, o: any = {}) => <div className={o.span ? 'md:col-span-2' : ''}><label className="lbl" htmlFor={k}>{label}</label><input id={k} type={o.type || 'text'} className="inp" placeholder={o.ph} maxLength={o.max} required={o.req} value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></div>;
   const H = (t: string, wajib: boolean) => <h3 className="form-h">{t}<Tag wajib={wajib} /></h3>;
   const pick = (j: string, x?: File) => {
     if (!x) return; if (!docTypeOk(j, x)) return toast(`"${x.name}" format tidak didukung${j === 'company_profile' ? ' (PDF, PPT, atau PPTX)' : ' (harus PDF)'}`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
@@ -43,9 +43,9 @@ export function Daftar() {
     };
     rd.readAsDataURL(x); setLogo(x);
   };
-  const FileBox = (j: string, l: string, req = false) => (
+  const FileBox = (j: string, l: string) => (
     <div key={j} className={`drop ${files[j] ? 'drop-on' : ''}`}>
-      <label className="lbl" htmlFor={'f_' + j}>{l}<Tag wajib={req} /></label>
+      <label className="lbl" htmlFor={'f_' + j}>{l}</label>
       <input id={'f_' + j} type="file" accept={docAccept(j)} className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
       {files[j] && <p className="mt-1 text-xs text-muted">{files[j].name} ({fmtSize(files[j].size)}) <button type="button" className="text-bad underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></p>}
     </div>
@@ -78,15 +78,15 @@ export function Daftar() {
       <form onSubmit={submit} className="card-solid mt-5 grid gap-4 p-4 sm:p-7 md:grid-cols-2">
         {H('Identitas Ormas', true)}
         {T('nama_ormas', 'Nama ormas', { span: true, max: 200, req: true })}
-        <div className="md:col-span-2"><label className="lbl" htmlFor="kat">Kategori / bidang ormas<Tag wajib /></label><input id="kat" className="inp" list="kat-list" maxLength={100} required placeholder="Pilih dari daftar atau ketik kategori sendiri" value={kat} onChange={(e) => setKat(e.target.value)} /><datalist id="kat-list">{(meta?.categories || []).map((c: any) => <option key={c.id} value={c.nama_kategori} />)}</datalist></div>
-        <div><label className="lbl" htmlFor="bentuk">Bentuk ormas<Tag wajib /></label><select id="bentuk" className="inp" required value={bp} onChange={(e) => setBp(e.target.value)}><option value="">Pilih bentuk ormas</option>{BENTUK.map((b) => <option key={b}>{b}</option>)}</select></div>
-        <div><label className="lbl" htmlFor="km">Kemantren<Tag wajib /></label><select id="km" className="inp" required value={f.kemantren} onChange={(e) => set('kemantren', e.target.value)}><option value="">Pilih kemantren</option>{KEMANTREN.map((k: string) => <option key={k}>{k}</option>)}</select></div>
-        {bp === 'LAINNYA' && <div className="md:col-span-2"><label className="lbl" htmlFor="bl">Masukkan Bentuk Ormas<Tag wajib /></label><input id="bl" className="inp" maxLength={100} required placeholder="Tulis bentuk ormas Anda" value={bl} onChange={(e) => setBl(e.target.value)} /></div>}
+        <div className="md:col-span-2"><label className="lbl" htmlFor="kat">Kategori / bidang ormas</label><input id="kat" className="inp" list="kat-list" maxLength={100} required placeholder="Pilih dari daftar atau ketik kategori sendiri" value={kat} onChange={(e) => setKat(e.target.value)} /><datalist id="kat-list">{(meta?.categories || []).map((c: any) => <option key={c.id} value={c.nama_kategori} />)}</datalist></div>
+        <div><label className="lbl" htmlFor="bentuk">Bentuk ormas</label><select id="bentuk" className="inp" required value={bp} onChange={(e) => setBp(e.target.value)}><option value="">Pilih bentuk ormas</option>{BENTUK.map((b) => <option key={b}>{b}</option>)}</select></div>
+        <div><label className="lbl" htmlFor="km">Kemantren</label><select id="km" className="inp" required value={f.kemantren} onChange={(e) => set('kemantren', e.target.value)}><option value="">Pilih kemantren</option>{KEMANTREN.map((k: string) => <option key={k}>{k}</option>)}</select></div>
+        {bp === 'LAINNYA' && <div className="md:col-span-2"><label className="lbl" htmlFor="bl">Masukkan Bentuk Ormas</label><input id="bl" className="inp" maxLength={100} required placeholder="Tulis bentuk ormas Anda" value={bl} onChange={(e) => setBl(e.target.value)} /></div>}
         {T('bidang_kegiatan', 'Bidang kegiatan', { span: true, max: 300, req: true })}
 
         {H('Logo Ormas', true)}
         <div className="md:col-span-2">
-          <label className="lbl" htmlFor="lg">Unggah logo ormas<Tag wajib /></label>
+          <label className="lbl" htmlFor="lg">Unggah logo ormas</label>
           <input id="lg" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" className="text-sm" onChange={(e) => { pickLogo(e.target.files?.[0]); e.target.value = ''; }} />
           <ul className="mt-1 list-disc pl-5 text-xs text-muted"><li>Format: PNG, JPG, atau JPEG.</li><li>Rasio gambar 1:1 (persegi), rekomendasi resolusi 512 × 512 px.</li><li>Ukuran ideal di bawah 500 KB, maksimal 1 MB.</li></ul>
           {logoUrl && <div className="mt-2 flex items-start gap-3"><img src={logoUrl} alt="Pratinjau logo ormas" className="h-24 w-24 rounded-2xl border border-line bg-white object-contain" /><div className="text-xs"><p className="font-semibold">{logo?.name} ({fmtSize(logo?.size || 0)})</p>{logoWarn.map((w) => <p key={w} className="mt-1 note-warn mt-1 !p-1.5 !text-xs">⚠ {w}</p>)}<button type="button" className="mt-1 text-bad underline" onClick={() => { setLogo(null); setLogoUrl(''); setLogoWarn([]); }}>hapus logo</button></div></div>}
@@ -98,23 +98,23 @@ export function Daftar() {
         {H('Kontak dan Alamat', true)}
         {T('nomor_whatsapp_ketua', 'Nomor WhatsApp ketua (untuk konfirmasi dari kami)', { type: 'tel', ph: '081234567890', req: true })}
         {T('email_ormas', 'Email ormas', { type: 'email', req: true })}
-        <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat<Tag wajib /></label><textarea id="al" rows={2} maxLength={500} required className="inp" value={f.alamat} onChange={(e) => set('alamat', e.target.value)} /></div>
+        <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat</label><textarea id="al" rows={2} maxLength={500} required className="inp" value={f.alamat} onChange={(e) => set('alamat', e.target.value)} /></div>
 
         {H('Jumlah Anggota', true)}
-        {MEM.map(([k, l]) => <div key={k}><label className="lbl" htmlFor={k}>{l}<Tag wajib /></label><input id={k} type="number" min={0} max={9999999} step={1} inputMode="numeric" required className="inp" placeholder="0" value={f[k] ?? ''} onChange={(e) => set(k, e.target.value.replace(/\D/g, ''))} /></div>)}
+        {MEM.map(([k, l]) => <div key={k}><label className="lbl" htmlFor={k}>{l}</label><input id={k} type="number" min={0} max={9999999} step={1} inputMode="numeric" required className="inp" placeholder="0" value={f[k] ?? ''} onChange={(e) => set(k, e.target.value.replace(/\D/g, ''))} /></div>)}
         <p className="text-xs text-muted md:col-span-2">Isi angka saja (tanpa nama anggota). Isi 0 bila tidak ada. Rincian perempuan, lansia, dan disabilitas boleh saling beririsan, tetapi tiap rincian tidak boleh lebih besar dari total.</p>
 
         {H('Dokumen Tambahan', true)}
-        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{FileBox(ADART[0], 'AD/ART (PDF)', true)}{FileBox(COMPANY_PROFILE[0], 'Company Profile ormas (PDF / PPT / PPTX, tampil terbuka di katalog)', true)}</div>
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{FileBox(ADART[0], 'AD/ART (PDF)')}{FileBox(COMPANY_PROFILE[0], 'Company Profile ormas (PDF / PPT / PPTX, tampil terbuka di katalog)')}</div>
         <CompanyProfileGuide />
-        <CpChecklist value={f.cp_bagian} onChange={(v) => set('cp_bagian', v)} />
+        <CpChecklist ringkas value={f.cp_bagian} onChange={(v) => set('cp_bagian', v)} />
 
         {H('Legal Standing', false)}
-        {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d (Opsional)" forever value={f.legal_berlaku_sd ?? ''} onChange={(v: string) => set('legal_berlaku_sd', v)} />
+        {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d" forever value={f.legal_berlaku_sd ?? ''} onChange={(v: string) => set('legal_berlaku_sd', v)} />
         {H(`Dokumen PDF (maks. ${maxMb} MB per file)`, false)}
         <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{DOC_TYPES.filter(([j]: string[]) => j !== 'skto').map(([j, l]: string[]) => FileBox(j, l))}{FileBox(DOKUMENTASI[0], 'Laporan kegiatan tahunan (PDF)')}</div>
         {H('Tautan Dokumentasi dan Media Sosial', false)}
-        <LinkInputs f={f} set={set} />
+        <LinkInputs ringkas f={f} set={set} />
         <div className="flex justify-end md:col-span-2"><button className="btn-p" disabled={busy}><Send size={16} /> {busy ? 'Mengirim…' : 'Kirim pendaftaran'}</button></div>
       </form>
     </div>

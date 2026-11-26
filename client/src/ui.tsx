@@ -191,16 +191,17 @@ export function MemberInputs({ f, set }: { f: any; set: (k: string, v: any) => v
 }
 
 // Tautan dokumentasi (mis. Google Drive) dan Instagram
-export function LinkInputs({ f, set }: { f: any; set: (k: string, v: any) => void }) {
+export function LinkInputs({ f, set, ringkas = false }: { f: any; set: (k: string, v: any) => void; ringkas?: boolean }) {
+  const ops = ringkas ? '' : ' (opsional)'; // ringkas: keterangan sudah ada di judul kategori
   return (
     <>
-      <div className="md:col-span-2"><label className="lbl" htmlFor="link_dokumentasi">Link dokumentasi kegiatan (opsional) <span className="font-normal text-muted">mis. folder Google Drive</span></label>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_dokumentasi">Link dokumentasi kegiatan{ops} <span className="font-normal text-muted">mis. folder Google Drive</span></label>
         <input id="link_dokumentasi" type="url" className="inp" maxLength={500} placeholder="https://drive.google.com/..." value={f.link_dokumentasi ?? ''} onChange={(e) => set('link_dokumentasi', e.target.value)} /></div>
-      <div className="md:col-span-2"><label className="lbl" htmlFor="link_instagram"><InstagramIcon size={14} className="mr-1 inline text-bad" />Instagram ormas (opsional) <span className="font-normal text-muted">tautan atau @username</span></label>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_instagram"><InstagramIcon size={14} className="mr-1 inline text-bad" />Instagram ormas{ops} <span className="font-normal text-muted">tautan atau @username</span></label>
         <input id="link_instagram" className="inp" maxLength={200} placeholder="@namaormas atau https://instagram.com/namaormas" value={f.link_instagram ?? ''} onChange={(e) => set('link_instagram', e.target.value)} /></div>
-      <div className="md:col-span-2"><label className="lbl" htmlFor="link_youtube">Link YouTube ormas (opsional)</label>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_youtube">Link YouTube ormas{ops}</label>
         <input id="link_youtube" type="url" className="inp" maxLength={200} placeholder="https://youtube.com/@namaormas" value={f.link_youtube ?? ''} onChange={(e) => set('link_youtube', e.target.value)} /></div>
-      <div className="md:col-span-2"><label className="lbl" htmlFor="link_tiktok">Link TikTok ormas (opsional)</label>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_tiktok">Link TikTok ormas{ops}</label>
         <input id="link_tiktok" type="url" className="inp" maxLength={200} placeholder="https://tiktok.com/@namaormas" value={f.link_tiktok ?? ''} onChange={(e) => set('link_tiktok', e.target.value)} /></div>
     </>
   );
@@ -218,14 +219,14 @@ export function CompanyProfileGuide({ compact = false }: { compact?: boolean }) 
     </div>
   );
 }
-export function CpChecklist({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function CpChecklist({ value, onChange, ringkas = false }: { value: string; onChange: (v: string) => void; ringkas?: boolean }) {
   const sel = new Set(String(value || '').split(',').filter(Boolean));
   const toggle = (k: string) => { const n = new Set(sel); if (n.has(k)) n.delete(k); else n.add(k); onChange(CP_PARTS.map(([x]) => x).filter((x) => n.has(x)).join(',')); };
   return (
     <fieldset className="panel md:col-span-2">
-      <legend className="px-1 text-sm font-semibold">Bagian yang sudah ada di Company Profile Anda <span className="chip ml-1 !text-[10px] uppercase text-muted">Opsional</span></legend>
+      <legend className="px-1 text-sm font-semibold">Bagian yang sudah ada di Company Profile Anda{!ringkas && <span className="chip ml-1 !text-[10px] uppercase text-muted">Opsional</span>}</legend>
       <div className="grid gap-1 sm:grid-cols-2">{CP_PARTS.map(([k, l]) => <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sel.has(k)} onChange={() => toggle(k)} />{l}</label>)}</div>
-      <p className="mt-1 text-xs text-muted">Centang bagian yang sudah dimuat di berkas Company Profile. Centang ini menentukan status kelengkapan.</p>
+      <p className="mt-1 text-xs text-muted">Centang bagian yang sudah dimuat di berkas Company Profile. Centang ini menentukan status kelengkapan.{ringkas && ' Boleh dikosongkan.'}</p>
     </fieldset>
   );
 }
