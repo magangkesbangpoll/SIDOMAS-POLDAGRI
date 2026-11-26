@@ -10,8 +10,9 @@ import { Home, PublicLayout } from './pages/Landing';
 import { AdminShell } from './pages/Admin';
 import { Forgot, Login, Reset } from './pages/AdminAuth';
 import { PortalForgot, PortalHome, PortalLogin, PortalReset } from './pages/Portal';
+import { PortalDashboard, PortalLaporan, PortalLayout } from './pages/PortalBatch';
 import { OrmasPage } from './pages/AdminOrmas';
-import { Dashboard } from './pages/Dashboard';
+import { AdminHome, LaporanPage, PengumumanPage } from './pages/AdminBatch';
 import { Daftar } from './pages/Daftar';
 import { PendaftaranPage } from './pages/AdminPendaftaran';
 import { ExpiredPage, NotifPage } from './pages/Notifikasi';
@@ -35,14 +36,20 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="ormas-login" element={<PortalLogin />} />
         <Route path="ormas-login/lupa" element={<PortalForgot />} />
         <Route path="ormas-login/reset" element={<PortalReset />} />
-        <Route path="portal" element={<PortalHome />} />
+        <Route path="portal" element={<PortalLayout />}>
+          <Route index element={<PortalDashboard />} />
+          <Route path="data" element={<PortalHome />} />
+          <Route path="laporan" element={<PortalLaporan />} />
+        </Route>
         <Route path="admin/login" element={<Login />} />
         <Route path="admin/forgot" element={<Forgot />} />
         <Route path="admin/reset" element={<Reset />} />
         <Route path="admin" element={<AdminShell />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<AdminHome />} />
           <Route path="ormas" element={<OrmasPage />} />
           <Route path="pendaftaran" element={<PendaftaranPage />} />
+          <Route path="laporan" element={<LaporanPage />} />
+          <Route path="pengumuman" element={<PengumumanPage />} />
           <Route path="kedaluwarsa" element={<ExpiredPage />} />
           <Route path="notifikasi" element={<NotifPage />} />
           <Route path="password-harian" element={<CredentialsPage />} />
