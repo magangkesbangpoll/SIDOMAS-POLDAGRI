@@ -4,22 +4,24 @@ import { Building2, ChevronDown, ChevronUp, Copy, Download, ExternalLink, Eye, F
 import { api } from '../api';
 import { ANGGOTA_KEYS, BerlakuInput, Badge, Confirm, DOC_STATUS, DOC_TYPES, ADART, COMPANY_PROFILE, CompanyProfileGuide, CpChecklist, CpStatus, DOKUMENTASI, docAccept, docTypeOk, ExpBadge, InstagramIcon, KEMANTREN, LinkInputs, MemberInputs, VALIDASI, nf, rincian, tglIndo, Empty, ErrorBox, Modal, Pager, Skeleton, Spinner, fmtDate, fmtSize, qs, useDebounced, useFetch, useToast } from '../ui';
 import { useAuth } from './Admin';
+import { LegalChip, LegalStandingFields, initLegalStatus } from '../batchui';
 
 export function OrmasPage() {
   const me = useAuth(); const toast = useToast();
-  const [q, setQ] = useState(''); const [kat, setKat] = useState(''); const [sd, setSd] = useState(''); const [sort, setSort] = useState('kode'); const [dir, setDir] = useState('asc'); const [page, setPage] = useState(1);
+  const [q, setQ] = useState(''); const [kat, setKat] = useState(''); const [sd, setSd] = useState(''); const [ls, setLs] = useState(''); const [sort, setSort] = useState('kode'); const [dir, setDir] = useState('asc'); const [page, setPage] = useState(1);
   const [form, setForm] = useState<any>(null); const [detail, setDetail] = useState<number | null>(null); const [del, setDel] = useState<any>(null); const [newAcc, setNewAcc] = useState<any>(null);
-  const dq = useDebounced(q); useEffect(() => setPage(1), [dq, kat, sd]);
+  const dq = useDebounced(q); useEffect(() => setPage(1), [dq, kat, sd, ls]);
   const [sp, setSp] = useSearchParams();
   useEffect(() => { // parameter dari dashboard, notifikasi, dan pencarian di header
-    const d = +(sp.get('detail') || 0), cari = sp.get('q'), baru = sp.get('tambah') === '1';
-    if (!d && cari == null && !baru) return;
+    const d = +(sp.get('detail') || 0), cari = sp.get('q'), baru = sp.get('tambah') === '1', lgl = sp.get('legal_status');
+    if (!d && cari == null && !baru && !lgl) return;
     if (d) setDetail(d); if (cari != null) setQ(cari); if (baru && me.perms.includes('manage_ormas')) setForm({});
+    if (lgl && ['ya', 'tidak', 'belum'].includes(lgl)) setLs(lgl);
     setSp({}, { replace: true });
   }, [sp]);
   const { data: exp } = useFetch<any>('/admin/kedaluwarsa?hari=90');
   const { data: meta } = useFetch<any>('/public/meta');
-  const query = qs({ q: dq, kategori_id: kat, status_dokumen: sd, sort, dir, page, pageSize: 10 });
+  const query = qs({ q: dq, kategori_id: kat, status_dokumen: sd, legal_status: ls, sort, dir, page, pageSize: 10 });
   const { data, loading, error, reload } = useFetch<any>('/admin/ormas?' + query);
   const can = (p: string) => me.perms.includes(p);
   const th = (key: string, label: string) => <th className={`th cursor-pointer select-none transition-colors hover:text-ink ${sort === key ? '!text-ink' : ''}`} aria-sort={sort === key ? (dir === 'asc' ? 'ascending' : 'descending') : undefined} onClick={() => { if (sort === key) setDir(dir === 'asc' ? 'desc' : 'asc'); else { setSort(key); setDir('asc'); } }}><span className="inline-flex items-center gap-1">{label}{sort === key && (dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}</span></th>;
@@ -27,12 +29,13 @@ export function OrmasPage() {
   return (
     <div className="stagger space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow">Direktori internal</p><h1 className="page-title">Data Ormas</h1>{data && <p className="page-sub">{data.total} ormas sesuai filter saat ini</p>}</div>
-        <div className="flex flex-wrap gap-2">{can('export') && <a className="btn-o" href={`/api/admin/export/ormas?${qs({ q: dq, kategori_id: kat, status_dokumen: sd })}`}><Download size={16} /> Ekspor Excel</a>}{can('manage_ormas') && <button className="btn-p" onClick={() => setForm({})}><Plus size={16} /> Tambah Ormas</button>}</div></div>
+        <div className="flex flex-wrap gap-2">{can('export') && <a className="btn-o" href={`/api/admin/export/ormas?${qs({ q: dq, kategori_id: kat, status_dokumen: sd, legal_status: ls })}`}><Download size={16} /> Ekspor Excel</a>}{can('manage_ormas') && <button className="btn-p" onClick={() => setForm({})}><Plus size={16} /> Tambah Ormas</button>}</div></div>
       {exp && (exp.sudah > 0 || exp.segera > 0) && <div className="note-warn flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2"><TriangleAlert size={18} className="shrink-0 text-warn" /><span>{exp.sudah > 0 && <b>{exp.sudah} dokumen sudah kedaluwarsa. </b>}{exp.segera > 0 && <>{exp.segera} dokumen akan berakhir dalam 90 hari. </>}Perhatikan label pada kolom Masa Berlaku.</span></span><Link className="txt-link" to="/admin/kedaluwarsa">Lihat daftar</Link></div>}
       <div className="card grid gap-3 p-3 md:grid-cols-4">
         <div className="relative md:col-span-2"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input className="inp pl-9" placeholder="Cari nama, ID, pengurus, atau nomor legal" aria-label="Cari" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <select className="inp" aria-label="Kategori" value={kat} onChange={(e) => setKat(e.target.value)}><option value="">Semua kategori</option>{meta?.categories.map((c: any) => <option key={c.id} value={c.id}>{c.nama_kategori}</option>)}</select>
         <select className="inp" aria-label="Status dokumen" value={sd} onChange={(e) => setSd(e.target.value)}><option value="">Semua status dokumen</option>{DOC_STATUS.map((s) => <option key={s}>{s}</option>)}</select>
+        <select className="inp" aria-label="Status Legal Standing" value={ls} onChange={(e) => setLs(e.target.value)}><option value="">Semua status Legal Standing</option><option value="ya">Sudah memiliki Legal Standing</option><option value="tidak">Belum memiliki Legal Standing</option><option value="belum">Belum dikonfirmasi</option></select>
         {/* Di ponsel kepala tabel disembunyikan, jadi pengurutan dipilih di sini */}
         <select className="inp md:hidden" aria-label="Urutkan" value={`${sort}:${dir}`} onChange={(e) => { const [k, d] = e.target.value.split(':'); setSort(k); setDir(d); }}>
           {[['kode', 'ID Ormas'], ['nama', 'Nama'], ['kategori', 'Kategori'], ['ketua', 'Ketua'], ['sk', 'Legal Standing'], ['status', 'Status dokumen']].flatMap(([k, l]) => [<option key={k + 'a'} value={`${k}:asc`}>Urutkan: {l} (naik)</option>, <option key={k + 'd'} value={`${k}:desc`}>Urutkan: {l} (turun)</option>])}
@@ -44,7 +47,7 @@ export function OrmasPage() {
             <tbody>{data.items.map((o: any, i: number) => (
               <tr key={o.id}><td data-label="No" className="td"><div>{(page - 1) * 10 + i + 1}</div></td>
                 <td data-label="Logo" className="td"><div>{o.has_logo ? <img src={`/api/logo/${o.kode_ormas}?v=${encodeURIComponent(o.updated_at)}`} className="h-10 w-10 rounded-xl object-cover" alt="" /> : <span className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-soft/60 text-gold"><Building2 size={16} /></span>}</div></td>
-                <td data-label="ID Ormas" className="td mono font-semibold text-link"><div>{o.kode_ormas}</div></td><td data-label="Nama" className="td min-w-[170px]"><div>{o.nama_ormas}<div className="text-xs text-muted">{o.status_operasional} · {o.status_publikasi === 'Publik' ? 'Tampil di katalog' : 'Disembunyikan'}</div></div></td><td data-label="Kategori" className="td"><div>{o.nama_kategori}</div></td><td data-label="Pengurus" className="td min-w-[135px] text-xs"><div><b>{o.nama_ketua || '-'}</b><br />{o.sekretaris || '-'}<br />{o.bendahara || '-'}<div className="mt-1 border-t border-line pt-1 text-muted">Anggota: <b>{nf(o.anggota_total)}</b>{o.anggota_total != null && rincian(o, true) && <span className="text-muted"> ({rincian(o, true)})</span>}</div></div></td><td data-label="Legal" className="td text-xs"><div>{o.legal_jenis || '-'}<br />{o.nomor_sk || '-'}{o.legal_tahun ? ` / ${o.legal_tahun}` : ''}{o.validasi && <div className="mt-1"><span className="chip text-gold">{o.validasi}</span></div>}</div></td>
+                <td data-label="ID Ormas" className="td mono font-semibold text-link"><div>{o.kode_ormas}</div></td><td data-label="Nama" className="td min-w-[170px]"><div>{o.nama_ormas}<div className="text-xs text-muted">{o.status_operasional} · {o.status_publikasi === 'Publik' ? 'Tampil di katalog' : 'Disembunyikan'}</div></div></td><td data-label="Kategori" className="td"><div>{o.nama_kategori}</div></td><td data-label="Pengurus" className="td min-w-[135px] text-xs"><div><b>{o.nama_ketua || '-'}</b><br />{o.sekretaris || '-'}<br />{o.bendahara || '-'}<div className="mt-1 border-t border-line pt-1 text-muted">Anggota: <b>{nf(o.anggota_total)}</b>{o.anggota_total != null && rincian(o, true) && <span className="text-muted"> ({rincian(o, true)})</span>}</div></div></td><td data-label="Legal" className="td text-xs"><div><LegalChip s={o.legal_status} /><div className="mt-1">{o.legal_status === 'tidak' ? <span className="text-muted">Tidak wajib diisi</span> : <>{o.legal_jenis || '-'}<br />{o.nomor_sk || '-'}{o.legal_tahun ? ` / ${o.legal_tahun}` : ''}</>}</div>{o.validasi && <div className="mt-1"><span className="chip text-gold">{o.validasi}</span></div>}</div></td>
                 <td data-label="Masa berlaku" className="td min-w-[140px] text-xs"><div><div><span className="text-muted">SKTO s/d</span> <b>{o.exp.skto.tgl ? tglIndo(o.exp.skto.tgl) : o.skto_berlaku_sd || '-'}</b><br /><ExpBadge e={o.exp.skto} /></div><div className="mt-1"><span className="text-muted">Legal s/d</span> <b>{o.exp.legal.tgl ? tglIndo(o.exp.legal.tgl) : o.legal_berlaku_sd || '-'}</b><br /><ExpBadge e={o.exp.legal} /></div></div></td>
                 <td data-label="Status" className="td"><div><Badge s={o.status_dokumen} /><div className="mt-1 text-xs text-muted">{o.jumlah_dok}/5 dokumen</div>{o.has_pending ? <div className="mt-1 text-xs font-semibold text-info">Ada perubahan baru dari ormas</div> : null}</div></td>
                 <td data-label="Aksi" className="td col-act"><div className="flex gap-1.5">
@@ -61,12 +64,12 @@ export function OrmasPage() {
   );
 }
 
-const KEYS = ['nama_ormas', 'kategori_id', 'bentuk', 'bidang_kegiatan', 'kemantren', 'validasi', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'status_dokumen', 'status_operasional', 'status_publikasi', 'catatan_verifikasi', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
+const KEYS = ['nama_ormas', 'kategori_id', 'bentuk', 'bidang_kegiatan', 'kemantren', 'validasi', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'telepon_ormas', 'email_ormas', 'alamat', 'legal_status', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', 'status_dokumen', 'status_operasional', 'status_publikasi', 'catatan_verifikasi', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 const DEFAULTS: any = { status_dokumen: 'Belum Lengkap', status_operasional: 'Aktif', status_publikasi: 'Disembunyikan' };
 
 function OrmasForm({ item, cats, meta, onClose, onSaved }: any) {
   const toast = useToast(); const edit = !!item.id; const maxMb = meta?.max_pdf_mb || 20;
-  const [f, setF] = useState<any>(() => Object.fromEntries(KEYS.map((k) => [k, item[k] ?? DEFAULTS[k] ?? ''])));
+  const [f, setF] = useState<any>(() => ({ ...Object.fromEntries(KEYS.map((k) => [k, item[k] ?? DEFAULTS[k] ?? ''])), legal_status: initLegalStatus(item) }));
   const [logo, setLogo] = useState<File | null>(null); const [rmLogo, setRmLogo] = useState(false);
   const [files, setFiles] = useState<Record<string, File>>({}); const [docs, setDocs] = useState<any[]>([]); const [busy, setBusy] = useState(false);
   useEffect(() => { if (edit) api(`/admin/ormas/${item.id}`).then((d) => setDocs(d.docs)).catch(() => {}); }, []);
@@ -111,15 +114,16 @@ function OrmasForm({ item, cats, meta, onClose, onSaved }: any) {
         <datalist id="dl-bentuk"><option value="Perkumpulan" /><option value="Yayasan" /><option value="Organisasi tanpa badan hukum" /></datalist>
         {H('Nama Pengurus')}
         {T('nama_ketua', 'Ketua')}{T('sekretaris', 'Sekretaris')}{T('bendahara', 'Bendahara')}
-        {T('nomor_whatsapp_ketua', 'Nomor telepon / WhatsApp ketua', { type: 'tel', ph: '081234567890' })}
         {H('Kontak dan Alamat')}
-        {T('email_ormas', 'Email ormas', { type: 'email', ph: 'nama@contoh.id' })}
+        {T('nomor_whatsapp_ketua', 'Nomor Telepon Ketua (nomor pribadi Ketua Ormas)', { type: 'tel', ph: '081234567890' })}
+        {T('telepon_ormas', 'Nomor Telepon Ormas (kontak resmi organisasi)', { type: 'tel', ph: '0274512345' })}
+        <p className="text-xs text-muted md:col-span-2">Di katalog publik Nomor Telepon Ketua disamarkan (08********23) dan Nomor Telepon Ormas tampil normal. Admin selalu melihat keduanya secara lengkap.</p>
+        {T('email_ormas', 'Email ormas', { type: 'email', ph: 'nama@contoh.id', span: true })}
         <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat <span className="font-normal text-muted">(tulis selengkap mungkin, dipakai untuk peta di halaman publik)</span></label><textarea id="al" rows={2} maxLength={500} className="inp" value={f.alamat} onChange={(e) => set('alamat', e.target.value)} /></div>
         {H('Jumlah Anggota')}
         <MemberInputs f={f} set={set} />
         {H('Legal Standing')}
-        {T('legal_jenis', 'Jenis', { list: 'dl-legal', ph: 'Mis. Akta Notaris' })}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { ph: '2021', max: 4 })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d" forever value={f.legal_berlaku_sd} onChange={(v) => set('legal_berlaku_sd', v)} />
-        <datalist id="dl-legal"><option value="Akta Notaris" /><option value="SK Kemenkumham" /></datalist>
+        <LegalStandingFields f={f} set={set} T={T} />
         {H('SKTO')}
         {T('skto_nomor', 'Nomor')}{T('skto_tahun', 'Tahun', { ph: '2024', max: 4 })}<BerlakuInput id="skto_berlaku_sd" label="Berlaku s/d" value={f.skto_berlaku_sd} onChange={(v) => set('skto_berlaku_sd', v)} />
         {H('Status')}
@@ -148,14 +152,9 @@ function OrmasForm({ item, cats, meta, onClose, onSaved }: any) {
         <CompanyProfileGuide />
         <div className="md:col-span-2"><CpStatus cpBagian={f.cp_bagian} hasFile={docs.some((d: any) => d.jenis_dokumen === 'company_profile')} /></div>
         <CpChecklist value={f.cp_bagian ?? ''} onChange={(v) => set('cp_bagian', v)} />
-        {H('Dokumentasi Kegiatan dan Media Sosial (opsional)')}
+        {H('Tautan Dokumentasi dan Media Sosial (opsional)')}
         <LinkInputs f={f} set={set} />
-        {(() => { const [j, l] = DOKUMENTASI; const cur = docs.find((d) => d.jenis_dokumen === j); return (
-          <div className={`drop md:col-span-2 ${files[j] || cur ? 'drop-on' : ''}`}>
-            <label className="lbl" htmlFor="f_dok">Unggah {l} (PDF)</label>
-            <input id="f_dok" type="file" accept="application/pdf" className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
-            <p className="mt-1 text-xs text-muted">{files[j] ? <>Akan diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}) <button type="button" className="text-bad underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}). Pilih file baru untuk mengganti.</> : 'Tidak wajib. Kumpulkan foto kegiatan menjadi satu PDF, atau cukup pakai link di atas.'}</p>
-          </div>); })()}
+        <p className="note-info !text-xs md:col-span-2">Laporan Kegiatan Tahunan disusun oleh ormas per tahun lewat Portal Ormas, dan dipantau admin di menu <b>Laporan Tahunan</b>.</p>
         <div className="sticky bottom-0 -mx-5 -mb-5 flex justify-end gap-2 rounded-b-2xl border-t border-line bg-surface px-5 py-3 md:col-span-2"><button type="button" className="btn-o" onClick={onClose}>Batal</button><button className="btn-p" disabled={busy}>{busy ? <><Spinner /> Menyimpan…</> : 'Simpan'}</button></div>
       </form>
     </Modal>
@@ -168,6 +167,7 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
   const row = (l: string, v: any) => <div className="min-w-0"><dt className="text-xs text-muted">{l}</dt><dd className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{v || '-'}</dd></div>;
   const lbl = (j: string) => DOC_TYPES.find(([k]) => k === j)?.[1] || 'Dokumen lain';
   const wa = (n: string) => n ? <a className="text-link underline" target="_blank" rel="noreferrer" href={`https://wa.me/${n.replace(/\D/g, '').replace(/^0/, '62')}`}>{n}</a> : '';
+  const tel = (n: string) => n ? <a className="text-link underline" href={`tel:${n.replace(/[^\d+]/g, '')}`}>{n}</a> : '';
   return (
     <Modal drawer title="Detail Ormas" onClose={onClose}>
       {error ? <ErrorBox text={error} /> : !o ? <Skeleton rows={4} /> : (
@@ -176,8 +176,8 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
           {o.pending && <PendingPanel o={o} onDone={() => { reload(); onChanged(); }} />}
           <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2 md:grid-cols-3">
             {row('Kategori', o.nama_kategori)}{row('Bentuk', o.bentuk)}{row('Kemantren', o.kemantren)}{row('Bidang kegiatan', o.bidang_kegiatan)}{row('Status validasi', o.validasi)}{row('Status dokumen', <Badge s={o.status_dokumen} />)}
-            {row('Ketua', o.nama_ketua)}{row('Sekretaris', o.sekretaris)}{row('Bendahara', o.bendahara)}{row('Telepon / WhatsApp ketua', wa(o.nomor_whatsapp_ketua))}{row('Email ormas', o.email_ormas)}{row('Alamat kantor / sekretariat', o.alamat)}
-            {row('Legal standing', <>{[o.legal_jenis, o.nomor_sk, o.legal_tahun && `Tahun ${o.legal_tahun}`, o.exp.legal.tgl ? `s/d ${tglIndo(o.exp.legal.tgl)}` : o.legal_berlaku_sd && `s/d ${o.legal_berlaku_sd}`].filter(Boolean).join(' · ') || '-'}<br /><ExpBadge e={o.exp.legal} full /></>)}{row('SKTO', <>{[o.skto_nomor, o.skto_tahun && `Tahun ${o.skto_tahun}`, o.exp.skto.tgl ? `s/d ${tglIndo(o.exp.skto.tgl)}` : o.skto_berlaku_sd && `s/d ${o.skto_berlaku_sd}`].filter(Boolean).join(' · ') || '-'}<br /><ExpBadge e={o.exp.skto} full /></>)}
+            {row('Ketua', o.nama_ketua)}{row('Sekretaris', o.sekretaris)}{row('Bendahara', o.bendahara)}{row('Telepon ketua (pribadi)', wa(o.nomor_whatsapp_ketua))}{row('Telepon ormas (resmi)', tel(o.telepon_ormas))}{row('Email ormas', o.email_ormas)}{row('Alamat kantor / sekretariat', o.alamat)}
+            {row('Memiliki Legal Standing?', <LegalChip s={o.legal_status} />)}{row('Legal standing', o.legal_status === 'tidak' ? 'Tidak wajib diisi (belum memiliki)' : <>{[o.legal_jenis, o.nomor_sk, o.legal_tahun && `Tahun ${o.legal_tahun}`, o.exp.legal.tgl ? `s/d ${tglIndo(o.exp.legal.tgl)}` : o.legal_berlaku_sd && `s/d ${o.legal_berlaku_sd}`].filter(Boolean).join(' · ') || '-'}<br /><ExpBadge e={o.exp.legal} full /></>)}{row('SKTO', <>{[o.skto_nomor, o.skto_tahun && `Tahun ${o.skto_tahun}`, o.exp.skto.tgl ? `s/d ${tglIndo(o.exp.skto.tgl)}` : o.skto_berlaku_sd && `s/d ${o.skto_berlaku_sd}`].filter(Boolean).join(' · ') || '-'}<br /><ExpBadge e={o.exp.skto} full /></>)}
             {row('Jumlah anggota', nf(o.anggota_total))}{row('Perempuan', nf(o.anggota_perempuan))}{row('Lansia', nf(o.anggota_lansia))}{row('Disabilitas', nf(o.anggota_disabilitas))}
             {row('Link dokumentasi', o.link_dokumentasi && <a className="text-link underline" target="_blank" rel="noreferrer" href={o.link_dokumentasi}>Buka tautan</a>)}{row('Instagram', o.link_instagram && <a className="inline-flex items-center gap-1 text-bad underline" target="_blank" rel="noreferrer" href={o.link_instagram}><InstagramIcon size={14} />Buka Instagram</a>)}
             {row('Company Profile', <CpStatus cpBagian={o.cp_bagian} hasFile={o.docs.some((x: any) => x.jenis_dokumen === 'company_profile')} />)}
@@ -185,12 +185,13 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
             {row('Status operasional', o.status_operasional)}{row('Status publikasi', o.status_publikasi)}{row('Diperbarui', fmtDate(o.updated_at))}
           </dl>
           {o.catatan_verifikasi && <p className="panel text-sm"><b>Catatan verifikasi:</b> {o.catatan_verifikasi}</p>}
+          <div className="panel flex flex-wrap items-center justify-between gap-2 text-sm"><span><b>Laporan Kegiatan Tahunan</b><span className="block text-xs text-muted">Lihat laporan per tahun dan arsip ormas ini.</span></span><Link className="btn-o py-1" to={`/admin/laporan?ormas=${o.id}`}>Buka laporan tahunan</Link></div>
           <div className="panel text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="font-semibold"><KeyRound size={14} className="mr-1 inline" />Akun portal ormas (untuk mengubah biodata)</h4><p className="text-xs text-muted">{o.portal ? <>Username: <b>{o.portal.username}</b> · login terakhir: {o.portal.last_login ? fmtDate(o.portal.last_login) : 'belum pernah'}{o.portal.must_change ? ' · password awal belum diganti ormas' : ''}</> : 'Belum dibuat'}</p></div>{me.perms.includes('manage_ormas') && <button className="btn-o py-1" onClick={() => setAsk(true)}>{o.portal ? 'Atur ulang password' : 'Buat akun'}</button>}</div></div>
           <div><h4 className="mb-2 font-semibold">Dokumen PDF</h4>
             <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">{DOC_TYPES.map(([j, l]) => { const d = o.docs.find((x: any) => x.jenis_dokumen === j); return (
               <li key={j} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className={`mr-1 inline ${d ? 'text-bad' : 'text-muted/40'}`} /><b>{l}</b><span className="block text-xs text-muted">{d ? `${d.nama_file} · ${fmtSize(d.ukuran_file)} · ${fmtDate(d.uploaded_at)}` : 'Belum diunggah'}</span></span>
                 {d && me.perms.includes('view_docs') && <span className="flex gap-2"><button className="btn-p py-1" onClick={() => setView(view?.id === d.id ? null : d)}><ExternalLink size={14} /> Buka PDF</button><a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a></span>}</li>); })}
-              {(() => { const d = o.docs.find((x: any) => x.jenis_dokumen === 'dokumentasi'); return d ? <li className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className="mr-1 inline text-bad" /><b>Dokumentasi Kegiatan</b><span className="block text-xs text-muted">{d.nama_file} · {fmtSize(d.ukuran_file)} · {fmtDate(d.uploaded_at)}</span></span>{me.perms.includes('view_docs') && <span className="flex gap-2"><button className="btn-p py-1" onClick={() => setView(view?.id === d.id ? null : d)}><ExternalLink size={14} /> Buka PDF</button><a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a></span>}</li> : null; })()}
+              {(() => { const d = o.docs.find((x: any) => x.jenis_dokumen === 'dokumentasi'); return d ? <li className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className="mr-1 inline text-bad" /><b>Laporan lama (PDF tunggal)</b><span className="block text-xs text-muted">{d.nama_file} · {fmtSize(d.ukuran_file)} · {fmtDate(d.uploaded_at)}</span></span>{me.perms.includes('view_docs') && <span className="flex gap-2"><button className="btn-p py-1" onClick={() => setView(view?.id === d.id ? null : d)}><ExternalLink size={14} /> Buka PDF</button><a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a></span>}</li> : null; })()}
               {[ADART, COMPANY_PROFILE].map(([j, l]) => { const d = o.docs.find((x: any) => x.jenis_dokumen === j); return d ? <li key={j} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span><FileText size={14} className="mr-1 inline text-bad" /><b>{l}{j === 'company_profile' ? ' (terbuka untuk publik)' : ''}</b><span className="block text-xs text-muted">{d.nama_file} · {fmtSize(d.ukuran_file)} · {fmtDate(d.uploaded_at)}</span></span>{me.perms.includes('view_docs') && <a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /> Download</a>}</li> : null; })}
               {o.docs.filter((x: any) => !x.jenis_dokumen).map((d: any) => <li key={d.id} className="flex items-center justify-between p-3 text-sm"><span>{d.nama_file} <span className="text-xs text-muted">(dokumen lama)</span></span>{me.perms.includes('view_docs') && <a className="btn-o py-1" href={`/api/admin/files/${d.id}?dl=1`}><Download size={14} /></a>}</li>)}
             </ul></div>
@@ -202,7 +203,7 @@ function Detail({ id, onClose, onChanged }: { id: number; onClose: () => void; o
   );
 }
 
-const FIELD_LABELS: [string, string][] = [['bentuk', 'Bentuk'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['nama_ketua', 'Ketua'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['nomor_whatsapp_ketua', 'Telepon / WhatsApp ketua'], ['email_ormas', 'Email ormas'], ['alamat', 'Alamat kantor / sekretariat'], ['legal_jenis', 'Legal standing: jenis'], ['nomor_sk', 'Legal standing: nomor'], ['legal_tahun', 'Legal standing: tahun'], ['legal_berlaku_sd', 'Legal standing: berlaku s/d'], ['skto_nomor', 'SKTO: nomor'], ['skto_tahun', 'SKTO: tahun'], ['skto_berlaku_sd', 'SKTO: berlaku s/d'], ['anggota_total', 'Jumlah total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas'], ['link_dokumentasi', 'Link dokumentasi'], ['link_instagram', 'Instagram'], ['link_youtube', 'YouTube'], ['link_tiktok', 'TikTok'], ['cp_bagian', 'Bagian Company Profile']];
+const FIELD_LABELS: [string, string][] = [['bentuk', 'Bentuk'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['nama_ketua', 'Ketua'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['nomor_whatsapp_ketua', 'Telepon ketua (pribadi)'], ['telepon_ormas', 'Telepon ormas (resmi)'], ['email_ormas', 'Email ormas'], ['alamat', 'Alamat kantor / sekretariat'], ['legal_status', 'Memiliki Legal Standing (ya/tidak)'], ['legal_jenis', 'Legal standing: jenis'], ['nomor_sk', 'Legal standing: nomor'], ['legal_tahun', 'Legal standing: tahun'], ['legal_berlaku_sd', 'Legal standing: berlaku s/d'], ['skto_nomor', 'SKTO: nomor'], ['skto_tahun', 'SKTO: tahun'], ['skto_berlaku_sd', 'SKTO: berlaku s/d'], ['anggota_total', 'Jumlah total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas'], ['link_dokumentasi', 'Link dokumentasi'], ['link_instagram', 'Instagram'], ['link_youtube', 'YouTube'], ['link_tiktok', 'TikTok'], ['cp_bagian', 'Bagian Company Profile']];
 
 // Perubahan dari portal ormas yang menunggu verifikasi. Selama belum diverifikasi, katalog publik dan Google Drive tetap memakai data lama.
 function PendingPanel({ o, onDone }: { o: any; onDone: () => void }) {
