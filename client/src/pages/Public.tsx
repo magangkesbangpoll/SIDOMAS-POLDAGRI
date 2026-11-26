@@ -44,7 +44,7 @@ export function Catalog() {
         ) : data?.items.length ? (
           <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.items.map((o: any) => (
-              <article key={o.id} className="card-solid card-lift group relative flex flex-col p-5">
+              <article key={o.id} className="card-solid card-lift sheen group relative flex flex-col p-5">
                 <div className="flex items-start justify-between gap-3">
                   {o.has_logo ? <img src={`/api/logo/${o.kode_ormas}?v=${encodeURIComponent(o.updated_at)}`} alt="" className="h-14 w-14 shrink-0 rounded-2xl border border-line object-cover" /> : <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-navy text-gold-soft"><Building2 strokeWidth={1.6} /></span>}
                   <span className="mono text-xs text-muted">{o.kode_ormas}</span>

@@ -50,7 +50,7 @@ export function Home() {
     <>
       <section className="px-3 pt-3">
         <div className="cinema mx-auto max-w-6xl rounded-[28px] shadow-2xl shadow-navy/20">
-          <div className="photo -z-20" style={{ backgroundImage: "url('/bg-tugu.jpg')", backgroundPosition: '48% 60%' }} aria-hidden="true" />
+          <div className="photo kenburns -z-20" style={{ backgroundImage: "url('/bg-tugu.jpg')", backgroundPosition: '48% 60%' }} aria-hidden="true" />
           <div className="absolute inset-0 -z-10" aria-hidden="true" style={{ background: 'linear-gradient(96deg, rgb(11 17 32 / .95) 0%, rgb(11 17 32 / .82) 45%, rgb(11 17 32 / .3) 80%, rgb(11 17 32 / .45) 100%)' }} />
           <div className="px-5 pb-8 pt-14 sm:px-10 md:pb-12 md:pt-20">
             <p className="anim-fade-up text-[11px] font-bold uppercase tracking-[.22em] text-gold-soft">Portal Informasi · Bidang Poldagri</p>
@@ -90,7 +90,7 @@ export function Home() {
       <section className="px-3">
         <Reveal className="mx-auto max-w-6xl">
           <div className="cinema grid items-center gap-6 rounded-[28px] p-7 sm:p-12 md:grid-cols-[1fr_auto]">
-            <div className="photo -z-20" style={{ backgroundImage: "url('/bg-malioboro.jpg')" }} aria-hidden="true" />
+            <div className="photo kenburns -z-20" style={{ backgroundImage: "url('/bg-malioboro.jpg')" }} aria-hidden="true" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-navy-night/95 via-navy-night/85 to-navy-night/55" aria-hidden="true" />
             <div><h2 className="display text-3xl text-white">Ormas Anda belum ada di katalog?</h2><p className="mt-3 max-w-xl text-slate-200">Ajukan pendaftaran lewat formulir online. Admin akan memverifikasi data Anda sebelum ormas tampil di katalog.</p></div>
             <Link to="/daftar" className="btn-g">Daftar Ormas Baru <ArrowRight size={16} /></Link>

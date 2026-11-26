@@ -34,3 +34,26 @@ export function CountUp({ value, duration = 1200 }: { value: number | string | n
   }, [target, duration]);
   return <>{target == null || Number.isNaN(target) ? '–' : n.toLocaleString('id-ID')}</>;
 }
+
+// Jam berjalan (WIB). State dipisah di komponen ini agar halaman lain tidak ikut dirender tiap detik.
+const JAM = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+export function LiveClock({ className = '' }: { className?: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    // dijadwalkan tepat di pergantian detik supaya tidak melompat
+    const tick = () => { setNow(new Date()); t = setTimeout(tick, 1000 - (Date.now() % 1000) + 5); };
+    tick();
+    return () => clearTimeout(t);
+  }, []);
+  const teks = JAM.format(now);
+  return (
+    <div className={`clock ${className}`}>
+      <span className="live-dot" aria-hidden="true" />
+      <time dateTime={now.toISOString()} aria-label={`Jam ${teks} WIB`} className="clock-digits">
+        {teks.split('').map((c, i) => (c === ':' ? <span key={i} aria-hidden="true" className="clock-sep">:</span> : <span key={`${i}-${c}`} aria-hidden="true" className="clock-num">{c}</span>))}
+      </time>
+      <span className="eyebrow">WIB</span>
+    </div>
+  );
+}

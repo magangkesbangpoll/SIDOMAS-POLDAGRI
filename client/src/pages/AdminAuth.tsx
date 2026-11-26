@@ -6,7 +6,7 @@ import { Spinner, useToast } from '../ui';
 
 export const Shell = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div data-theme="dark" className="cinema flex min-h-screen items-center justify-center p-4 sm:p-8">
-    <div className="photo -z-20" style={{ backgroundImage: "url('/bg-tugu.jpg')" }} aria-hidden="true" />
+    <div className="photo kenburns -z-20" style={{ backgroundImage: "url('/bg-tugu.jpg')" }} aria-hidden="true" />
     <div className="absolute inset-0 -z-10" aria-hidden="true" style={{ background: 'linear-gradient(105deg, rgb(11 17 32 / .94) 0%, rgb(11 17 32 / .74) 48%, rgb(17 27 45 / .5) 100%), radial-gradient(50% 55% at 80% 18%, rgb(198 169 107 / .22), transparent 70%)' }} />
     <div className="grid w-full max-w-5xl items-center gap-10 lg:grid-cols-[1.15fr_1fr]">
       <div className="anim-fade-up hidden lg:block">

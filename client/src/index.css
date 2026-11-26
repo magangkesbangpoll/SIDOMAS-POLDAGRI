@@ -216,6 +216,65 @@ select option { background: rgb(var(--surface)); color: rgb(var(--body)); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } .reveal { opacity: 1; } }
 
+/* ---------- Animasi tambahan: hanya transform/opacity agar tetap ringan ---------- */
+@keyframes drift { from { transform: translate3d(-2.5%, -1.5%, 0) scale(1.04); } to { transform: translate3d(2.5%, 2%, 0) scale(1.1); } }
+@keyframes kenburns { from { transform: scale(1.02); } to { transform: scale(1.12) translate3d(-1.2%, -1%, 0); } }
+@keyframes popIn { from { opacity: 0; transform: translateY(18px) scale(.95); } to { opacity: 1; transform: none; } }
+@keyframes slideRight { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+@keyframes dropIn { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+@keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes digitIn { from { opacity: .15; transform: translateY(-.45em); } to { opacity: 1; transform: none; } }
+@keyframes pulseRing { from { opacity: .7; transform: scale(1); } to { opacity: 0; transform: scale(2.8); } }
+@keyframes blink { 50% { opacity: .35; } }
+@keyframes floaty { 50% { transform: translateY(-6px); } }
+@keyframes ring { 0%, 80%, 100% { transform: rotate(0); } 84% { transform: rotate(14deg); } 88% { transform: rotate(-12deg); } 92% { transform: rotate(8deg); } 96% { transform: rotate(-4deg); } }
+@keyframes sweep { from { transform: translateX(-130%) skewX(-18deg); } to { transform: translateX(260%) skewX(-18deg); } }
+
+/* Cahaya latar bergerak sangat pelan */
+body::before { inset: -8%; animation: drift 24s ease-in-out infinite alternate; will-change: transform; }
+.kenburns { animation: kenburns 28s ease-in-out infinite alternate; }
+.stagger-pop > * { animation-name: popIn; animation-duration: .55s; }
+
+/* Jam realtime */
+.clock { @apply inline-flex items-center gap-2.5 rounded-2xl border border-gold/35 px-4 py-2; background: rgb(var(--surface) / .6); box-shadow: 0 10px 30px -18px rgb(var(--gold) / .8), inset 0 1px 0 rgb(255 255 255 / .06); }
+.clock-digits { @apply flex text-2xl font-extrabold leading-none text-ink; font-variant-numeric: tabular-nums; }
+.clock-num { display: inline-block; min-width: .64em; text-align: center; animation: digitIn .3s ease-out; }
+.clock-sep { padding: 0 .06em; color: rgb(var(--gold)); animation: blink 1s ease-in-out infinite; }
+.live-dot { position: relative; width: 8px; height: 8px; border-radius: 9px; background: rgb(var(--ok)); }
+.live-dot::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: pulseRing 1.8s ease-out infinite; }
+
+/* Kerangka halaman masuk bergantian */
+.sidebar nav .nav-item { animation: slideRight .4s cubic-bezier(.2, .8, .2, 1) backwards; }
+.sidebar nav > div:nth-child(2) .nav-item { animation-delay: .1s; }
+.sidebar nav > div:nth-child(3) .nav-item { animation-delay: .2s; }
+.sidebar nav .nav-item:nth-child(2) { animation-duration: .48s; }
+.sidebar nav .nav-item:nth-child(3) { animation-duration: .56s; }
+.sidebar nav .nav-item:nth-child(4) { animation-duration: .64s; }
+header .topbar, header.topbar { animation: dropIn .45s cubic-bezier(.2, .8, .2, 1) backwards; }
+
+/* Baris tabel, kartu, dan daftar */
+.tbl tbody tr { animation: rowIn .4s ease-out backwards; }
+.tbl tbody tr:nth-child(2) { animation-delay: .05s; }
+.tbl tbody tr:nth-child(3) { animation-delay: .1s; }
+.tbl tbody tr:nth-child(4) { animation-delay: .15s; }
+.tbl tbody tr:nth-child(5) { animation-delay: .2s; }
+.tbl tbody tr:nth-child(n+6) { animation-delay: .25s; }
+
+/* Mikro-interaksi */
+.nav-item svg, .stat-icon, .btn svg, .btn-p svg, .btn-g svg, .btn-o svg, .icon-btn svg { transition: transform .25s cubic-bezier(.2, .8, .2, 1), color .2s ease; }
+.nav-item:hover svg { transform: translateX(2px) scale(1.12); }
+.btn-p:hover svg, .btn-g:hover svg, .btn-o:hover svg { transform: scale(1.18); }
+.group:hover .stat-icon { transform: translateY(-3px) scale(1.25); }
+.brand-mark { transition: transform .3s ease; }
+a:hover > .brand-mark { transform: rotate(-6deg) scale(1.06); }
+.empty-icon { animation: floaty 3.2s ease-in-out infinite; }
+.icon-btn[aria-label*='belum dibaca'] > svg { animation: ring 3.5s ease-in-out infinite; transform-origin: 50% 10%; }
+
+/* Kilau melintas saat disentuh */
+.sheen, .btn-p, .btn-g { position: relative; overflow: hidden; }
+.sheen::after, .btn-p::after, .btn-g::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; pointer-events: none; transform: translateX(-130%) skewX(-18deg); background: linear-gradient(90deg, transparent, rgb(255 255 255 / .16), transparent); }
+.sheen:hover::after, .btn-p:hover::after, .btn-g:hover::after { animation: sweep .8s ease-out; }
+
 /* ---------- 10. Responsif ---------- */
 @media (max-width: 767px) {
   .inp { font-size: 16px; } /* cegah zoom otomatis di iPhone */
