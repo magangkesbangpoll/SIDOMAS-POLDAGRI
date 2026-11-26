@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Building2, CalendarClock, ChevronDown, ChevronRight, FileDown, KeyRound, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ScrollText, Search, Settings, Sun, UserPlus, Users, X } from 'lucide-react';
+import { Bell, Building2, CalendarClock, ChevronDown, ChevronRight, ClipboardList, FileDown, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Moon, PanelLeftClose, PanelLeftOpen, ScrollText, Search, Settings, Sun, UserPlus, Users, X } from 'lucide-react';
 import { api } from '../api';
 import { Loading, useFetch } from '../ui';
 import { useTheme } from '../theme';
@@ -12,7 +12,7 @@ export const useAuth = () => useContext(Ctx);
 type Item = [string, string, any, string | null, string];
 const MENU: Item[] = [
   ['/admin', 'Dashboard', LayoutDashboard, null, 'Ikhtisar'], ['/admin/notifikasi', 'Notifikasi', Bell, null, 'Ikhtisar'],
-  ['/admin/ormas', 'Data Ormas', Building2, 'view_ormas', 'Organisasi'], ['/admin/pendaftaran', 'Pendaftaran Baru', UserPlus, 'view_ormas', 'Organisasi'], ['/admin/kedaluwarsa', 'Dokumen Kedaluwarsa', CalendarClock, 'view_ormas', 'Organisasi'], ['/admin/password-harian', 'Password Harian', KeyRound, 'view_credentials', 'Organisasi'],
+  ['/admin/ormas', 'Data Ormas', Building2, 'view_ormas', 'Organisasi'], ['/admin/pendaftaran', 'Pendaftaran Baru', UserPlus, 'view_ormas', 'Organisasi'], ['/admin/laporan', 'Laporan Tahunan', ClipboardList, 'view_ormas', 'Organisasi'], ['/admin/kedaluwarsa', 'Dokumen Kedaluwarsa', CalendarClock, 'view_ormas', 'Organisasi'], ['/admin/pengumuman', 'Pengumuman', Megaphone, 'view_ormas', 'Organisasi'], ['/admin/password-harian', 'Password Harian', KeyRound, 'view_credentials', 'Organisasi'],
   ['/admin/akun', 'Manajemen Admin', Users, 'manage_admins', 'Sistem'], ['/admin/ekspor', 'Ekspor Data', FileDown, 'export', 'Sistem'], ['/admin/log', 'Log Aktivitas', ScrollText, 'view_logs', 'Sistem'], ['/admin/pengaturan', 'Pengaturan', Settings, 'manage_settings', 'Sistem'],
 ];
 const GROUPS = ['Ikhtisar', 'Organisasi', 'Sistem'];
