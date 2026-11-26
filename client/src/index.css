@@ -1,21 +1,112 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-body { @apply bg-slate-50 text-slate-800 antialiased; }
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+  background-image: radial-gradient(900px 420px at 100% -8%, rgba(201, 162, 39, .09), transparent 60%), radial-gradient(800px 480px at -8% 0%, rgba(29, 74, 148, .08), transparent 60%);
+  background-attachment: fixed;
+}
 :focus-visible { @apply outline-2 outline-offset-2 outline-gold-500; }
 @layer components {
-  .inp { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-100; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-p { @apply btn bg-navy-800 text-white hover:bg-navy-700; }
-  .btn-g { @apply btn bg-gold-500 text-navy-900 hover:bg-gold-400; }
+  .inp { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition duration-150 hover:border-slate-400 focus:border-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-100; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-all duration-200 hover:-translate-y-px active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-p { @apply btn text-white shadow-sm hover:shadow-md; background-image: linear-gradient(135deg, #143a7a, #0f2f66); }
+  .btn-p:hover { background-image: linear-gradient(135deg, #1d4a94, #143a7a); }
+  .btn-g { @apply btn bg-gold-500 text-navy-900 shadow-sm hover:bg-gold-400 hover:shadow-md; }
   .btn-o { @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-100; }
   .btn-d { @apply btn bg-red-600 text-white hover:bg-red-700; }
   .lbl { @apply mb-1 block text-sm font-semibold text-slate-700; }
-  .card { @apply rounded-lg border border-slate-200 bg-white shadow-sm; }
+  .card { @apply rounded-lg border border-slate-200 bg-white shadow-sm; transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease; }
   .th { @apply whitespace-nowrap px-3 py-2.5 text-left text-xs font-semibold text-slate-600; }
   .td { @apply px-3 py-2.5 text-sm; }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.btn:disabled:hover { transform: none; }
+
+/* ===== Animasi ===== */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(22px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.1); } }
+@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(201, 162, 39, .5); } 50% { box-shadow: 0 0 0 10px rgba(201, 162, 39, 0); } }
+@keyframes shine { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+@keyframes drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(28px, -22px); } }
+
+.anim-fade-up { animation: fadeUp .7s ease-out both; }
+.anim-fade-in { animation: fadeIn .8s ease-out both; }
+.anim-slide { animation: slideIn .5s ease-out backwards; }
+.anim-float { animation: floaty 6s ease-in-out infinite; }
+.anim-drift { animation: drift 14s ease-in-out infinite; }
+.anim-d1 { animation-delay: .1s; }
+.anim-d2 { animation-delay: .2s; }
+.anim-d3 { animation-delay: .3s; }
+.anim-d4 { animation-delay: .4s; }
+.shimmer-text { background: linear-gradient(90deg, #d9b44a, #fff3c4, #d9b44a); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 4s linear infinite; }
+
+/* Muncul saat di-scroll (dipakai komponen Reveal) */
+.reveal { opacity: 0; }
+.reveal.in { opacity: 1; animation: fadeUp .7s ease-out backwards; animation-delay: var(--d, 0s); }
+
+/* Setiap halaman masuk dengan fade-up bertahap */
+main > *:not(.reveal), main > * > *:not(.reveal) { animation: fadeUp .5s ease-out backwards; }
+main > * > *:nth-child(2) { animation-delay: .06s; }
+main > * > *:nth-child(3) { animation-delay: .12s; }
+main > * > *:nth-child(4) { animation-delay: .18s; }
+main > * > *:nth-child(5) { animation-delay: .24s; }
+main > * > *:nth-child(6) { animation-delay: .30s; }
+main > * > *:nth-child(7) { animation-delay: .36s; }
+main > * > *:nth-child(8) { animation-delay: .42s; }
+
+/* Kartu dalam grid terangkat saat disentuh */
+.grid > .card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -14px rgba(11, 34, 80, .28); border-color: rgba(201, 162, 39, .45); }
+
+/* Baris tabel */
+tbody tr { transition: background-color .15s ease; }
+tbody tr:hover > td { background-color: rgba(238, 243, 251, .6); }
+
+/* Header atas (halaman publik dan portal ormas) */
+header.border-b-4.border-gold-500 { position: sticky; top: 0; z-index: 30; background-image: linear-gradient(110deg, #0b2250, #143a7a 55%, #0f2f66); box-shadow: 0 6px 20px -8px rgba(11, 34, 80, .5); }
+
+/* ===== Latar dua foto bergradasi =====
+   Foto ada di client/public: bg-tugu.jpg (kiri) dan bg-malioboro.jpg (kanan).
+   Tanpa foto, latar tetap tampil sebagai gradasi biru. */
+:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900) {
+  position: relative; isolation: isolate; overflow: hidden;
+  background-image: linear-gradient(135deg, #0b2250, #143a7a);
+}
+:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::before,
+:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::after {
+  content: ""; position: absolute; inset: -5%; z-index: -1; pointer-events: none;
+  background-size: cover; background-position: center;
+  animation: kenburns 26s ease-in-out infinite alternate;
+}
+:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::before {
+  background-image: linear-gradient(160deg, rgba(11, 34, 80, .78), rgba(15, 47, 102, .42)), url('/bg-tugu.jpg');
+  -webkit-mask-image: linear-gradient(105deg, #000 0%, #000 30%, transparent 72%);
+  mask-image: linear-gradient(105deg, #000 0%, #000 30%, transparent 72%);
+}
+:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::after {
+  background-image: linear-gradient(200deg, rgba(11, 34, 80, .55), rgba(168, 134, 28, .30)), url('/bg-malioboro.jpg');
+  -webkit-mask-image: linear-gradient(105deg, transparent 28%, #000 70%, #000 100%);
+  mask-image: linear-gradient(105deg, transparent 28%, #000 70%, #000 100%);
+}
+@media (max-width: 767px) {
+  :is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::before { -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%, transparent 75%); mask-image: linear-gradient(180deg, #000 0%, #000 30%, transparent 75%); }
+  :is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::after { -webkit-mask-image: linear-gradient(180deg, transparent 25%, #000 70%, #000 100%); mask-image: linear-gradient(180deg, transparent 25%, #000 70%, #000 100%); }
+}
+
+/* Kartu login: kaca buram */
+div.grid.min-h-screen.place-items-center.bg-navy-900 > .card {
+  background: rgba(255, 255, 255, .93);
+  -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .55); border-radius: 1rem;
+  box-shadow: 0 25px 60px -15px rgba(5, 15, 40, .6);
+  animation: cardIn .7s cubic-bezier(.2, .8, .2, 1) backwards;
+}
+div.grid.min-h-screen.place-items-center.bg-navy-900 > .card span.bg-gold-500 { animation: glow 3s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
 html { -webkit-text-size-adjust: 100%; }
 img, video, iframe { max-width: 100%; }

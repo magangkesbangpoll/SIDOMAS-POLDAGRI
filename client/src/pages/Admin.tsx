@@ -22,20 +22,21 @@ export function AdminShell() {
   if (me.must_change) return <ChangePassword onDone={load} askEmail={String(me.email).endsWith('@sidomas.local')} />;
   const logout = async () => { await api('/auth/logout', { method: 'POST', body: {} }).catch(() => {}); nav('/admin/login'); };
   const items = MENU.filter(([, , , perm]) => !perm || me.perms.includes(perm)).map(([to, l, I, p]) => [to, to === '/admin/pendaftaran' && pc?.count ? `${l} (${pc.count})` : l, I, p] as [string, string, any, string | null]);
-  const link = ({ isActive }: any) => `flex items-center gap-3 rounded px-3 py-2 text-sm font-semibold ${isActive ? 'bg-gold-500 text-navy-900' : 'text-navy-100 hover:bg-navy-700'}`;
+  const link = ({ isActive }: any) => `anim-slide group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-gold-500 to-gold-400 text-navy-900 shadow-lg shadow-gold-500/20' : 'text-navy-100 hover:translate-x-0.5 hover:bg-white/10 hover:text-white'}`;
+  const initial = String(me.nama || '?').trim().charAt(0).toUpperCase();
   return (
     <Ctx.Provider value={me}>
       <div className="flex min-h-screen">
-        {open && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setOpen(false)} />}
-        <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-navy-900 p-3 transition-all md:static ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${collapsed ? 'md:w-16' : 'md:w-60'} w-60`}>
-          <div className="mb-4 flex items-center gap-2 px-2 py-2 text-white"><Building2 className="shrink-0 text-gold-400" />{!collapsed && <span className="font-serif text-lg font-bold">SIDOMAS</span>}</div>
-          <nav className="flex-1 space-y-1">{items.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/admin'} className={link} onClick={() => setOpen(false)} title={label}><Icon size={18} className="shrink-0" />{!collapsed && label}</NavLink>)}</nav>
-          <button onClick={logout} className="flex items-center gap-3 rounded px-3 py-2 text-sm font-semibold text-navy-100 hover:bg-navy-700" title="Logout"><LogOut size={18} className="shrink-0" />{!collapsed && 'Logout'}</button>
+        {open && <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />}
+        <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-gradient-to-b from-navy-900 to-navy-800 p-3 shadow-xl transition-all md:static ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${collapsed ? 'md:w-16' : 'md:w-60'} w-60`}>
+          <div className="mb-4 flex items-center gap-3 border-b border-white/10 px-2 py-3 text-white"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gold-500 text-navy-900 shadow-lg"><Building2 size={18} /></span>{!collapsed && <span className="font-serif text-lg font-bold">SIDOMAS</span>}</div>
+          <nav className="flex-1 space-y-1">{items.map(([to, label, Icon], i) => <NavLink key={to} to={to} end={to === '/admin'} className={link} style={{ animationDelay: `${i * 40}ms` }} onClick={() => setOpen(false)} title={label}><Icon size={18} className="shrink-0 transition-transform duration-200 group-hover:scale-110" />{!collapsed && label}</NavLink>)}</nav>
+          <button onClick={logout} className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-navy-100 transition-all duration-200 hover:bg-red-500/20 hover:text-white" title="Logout"><LogOut size={18} className="shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5" />{!collapsed && 'Logout'}</button>
         </aside>
         <div className="min-w-0 flex-1">
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+          <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur">
             <button className="btn-o px-2" aria-label="Menu" onClick={() => (window.innerWidth < 768 ? setOpen(!open) : setCollapsed(!collapsed))}><Menu size={18} /></button>
-            <div className="flex items-center gap-3"><NotifBell /><div className="text-right text-sm"><p className="font-semibold text-navy-900">{me.nama}</p><p className="text-xs text-slate-500">{me.role}</p></div></div>
+            <div className="flex items-center gap-3"><NotifBell /><div className="text-right text-sm"><p className="font-semibold text-navy-900">{me.nama}</p><p className="text-xs text-slate-500">{me.role}</p></div><span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-navy-600 to-navy-900 text-sm font-bold text-gold-400 shadow">{initial}</span></div>
           </header>
           <main className="p-4 md:p-6"><Outlet /></main>
         </div>

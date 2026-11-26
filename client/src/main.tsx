@@ -1,11 +1,11 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
 import './inputfilter'; // filter input otomatis di semua form
 import { ToastProvider } from './ui';
-import { About, Catalog, Home, OrmasPublic, PublicLayout } from './pages/Public';
+import { About, Catalog, OrmasPublic } from './pages/Public';
+import { Home, PublicLayout } from './pages/Landing';
 import { AdminShell } from './pages/Admin';
 import { Forgot, Login, Reset } from './pages/AdminAuth';
 import { PortalForgot, PortalHome, PortalLogin, PortalReset } from './pages/Portal';
