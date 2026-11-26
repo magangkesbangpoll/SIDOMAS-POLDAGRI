@@ -108,7 +108,7 @@ export const Skeleton = ({ rows = 5 }: { rows?: number }) => (
 export const Spinner = () => <span className="spinner" aria-hidden="true" />;
 export const Loading = () => <div className="grid min-h-screen place-items-center text-muted"><span className="flex items-center gap-3 text-sm"><Spinner /> Memuat…</span></div>;
 export const Empty = ({ text }: { text: string }) => (
-  <div className="flex flex-col items-center gap-3 px-4 py-12 text-center text-sm text-muted"><span className="grid h-11 w-11 place-items-center rounded-full border border-line text-gold"><Inbox size={19} /></span><p className="max-w-sm">{text}</p></div>
+  <div className="flex flex-col items-center gap-3 px-4 py-12 text-center text-sm text-muted"><span className="empty-icon grid h-11 w-11 place-items-center rounded-full border border-line text-gold"><Inbox size={19} /></span><p className="max-w-sm">{text}</p></div>
 );
 export const ErrorBox = ({ text, retry }: { text: string; retry?: () => void }) => (
   <div className="note-bad flex items-start gap-2" role="alert"><TriangleAlert size={17} className="mt-0.5 shrink-0 text-bad" /><span>{text} {retry && <button className="ml-2 font-semibold underline" onClick={retry}>Coba lagi</button>}</span></div>
