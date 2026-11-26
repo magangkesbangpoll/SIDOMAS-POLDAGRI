@@ -1,8 +1,15 @@
+// Token warna disimpan sebagai variabel CSS (lihat src/index.css) agar satu kelas berlaku di tema gelap dan terang.
+const v = (n) => `rgb(var(--${n}) / <alpha-value>)`;
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: { extend: {
-    colors: { navy: { 50: '#eef3fb', 100: '#d9e4f5', 600: '#1d4a94', 700: '#143a7a', 800: '#0f2f66', 900: '#0b2250' }, gold: { 400: '#d9b44a', 500: '#c9a227', 600: '#a8861c' } },
-    fontFamily: { sans: ['"Source Sans 3"', 'system-ui', 'Segoe UI', 'sans-serif'], serif: ['"Source Serif 4"', 'Georgia', 'serif'] },
+    colors: {
+      bg: v('bg'), surface: v('surface'), raised: v('raised'), soft: v('soft'), line: 'var(--line)',
+      ink: v('ink'), body: v('body'), muted: v('muted'), link: v('link'),
+      gold: { DEFAULT: v('gold'), soft: v('gold-soft') }, navy: { DEFAULT: '#172338', deep: '#111B2D', night: '#0B1120' },
+      ok: v('ok'), warn: v('warn'), bad: v('bad'), info: v('info'),
+    },
+    fontFamily: { sans: ['"Plus Jakarta Sans"', 'system-ui', 'Segoe UI', 'sans-serif'], serif: ['Fraunces', 'Georgia', 'serif'] },
   } },
   plugins: [],
 };

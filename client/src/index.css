@@ -1,120 +1,234 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-body {
-  @apply bg-slate-50 text-slate-800 antialiased;
-  background-image: radial-gradient(900px 420px at 100% -8%, rgba(201, 162, 39, .09), transparent 60%), radial-gradient(800px 480px at -8% 0%, rgba(29, 74, 148, .08), transparent 60%);
-  background-attachment: fixed;
+
+/* =====================================================================
+   SIDOMAS — Civic Intelligence · Executive Glass
+   1. Token  2. Latar  3. Permukaan  4. Kontrol  5. Data  6. Overlay
+   7. Navigasi  8. Halaman publik  9. Gerak  10. Responsif
+   ===================================================================== */
+
+/* ---------- 1. Token ---------- */
+:root, [data-theme='light'] {
+  color-scheme: light;
+  --bg: 244 246 249; --surface: 255 255 255; --raised: 255 255 255; --soft: 233 238 245;
+  --ink: 23 35 56; --body: 32 43 60; --muted: 91 105 126; --link: 44 76 128;
+  --gold: 185 154 91; --gold-soft: 216 191 138; --gold-text: 125 98 42;
+  --ok: 21 118 86; --warn: 158 94 8; --bad: 170 58 62; --info: 42 96 160;
+  --line: rgba(23, 35, 56, .10);
+  --glass: rgba(255, 255, 255, .74); --glass-strong: rgba(255, 255, 255, .96); --glass-edge: rgba(255, 255, 255, .85);
+  --shadow: 0 1px 2px rgba(23, 35, 56, .04), 0 12px 32px -18px rgba(23, 35, 56, .20);
+  --shadow-lift: 0 2px 4px rgba(23, 35, 56, .04), 0 22px 44px -20px rgba(23, 35, 56, .30);
+  --glow-1: rgba(76, 116, 178, .13); --glow-2: rgba(198, 169, 107, .16); --glow-3: rgba(120, 150, 200, .08);
 }
-:focus-visible { @apply outline-2 outline-offset-2 outline-gold-500; }
-@layer components {
-  .inp { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm transition duration-150 hover:border-slate-400 focus:border-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-100; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-all duration-200 hover:-translate-y-px active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-p { @apply btn text-white shadow-sm hover:shadow-md; background-image: linear-gradient(135deg, #143a7a, #0f2f66); }
-  .btn-p:hover { background-image: linear-gradient(135deg, #1d4a94, #143a7a); }
-  .btn-g { @apply btn bg-gold-500 text-navy-900 shadow-sm hover:bg-gold-400 hover:shadow-md; }
-  .btn-o { @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-100; }
-  .btn-d { @apply btn bg-red-600 text-white hover:bg-red-700; }
-  .lbl { @apply mb-1 block text-sm font-semibold text-slate-700; }
-  .card { @apply rounded-lg border border-slate-200 bg-white shadow-sm; transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease; }
-  .th { @apply whitespace-nowrap px-3 py-2.5 text-left text-xs font-semibold text-slate-600; }
-  .td { @apply px-3 py-2.5 text-sm; }
-}
-.btn:disabled:hover { transform: none; }
-
-/* ===== Animasi ===== */
-@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slideIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
-@keyframes cardIn { from { opacity: 0; transform: translateY(22px) scale(.97); } to { opacity: 1; transform: none; } }
-@keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.1); } }
-@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(201, 162, 39, .5); } 50% { box-shadow: 0 0 0 10px rgba(201, 162, 39, 0); } }
-@keyframes shine { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
-@keyframes drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(28px, -22px); } }
-
-.anim-fade-up { animation: fadeUp .7s ease-out both; }
-.anim-fade-in { animation: fadeIn .8s ease-out both; }
-.anim-slide { animation: slideIn .5s ease-out backwards; }
-.anim-float { animation: floaty 6s ease-in-out infinite; }
-.anim-drift { animation: drift 14s ease-in-out infinite; }
-.anim-d1 { animation-delay: .1s; }
-.anim-d2 { animation-delay: .2s; }
-.anim-d3 { animation-delay: .3s; }
-.anim-d4 { animation-delay: .4s; }
-.shimmer-text { background: linear-gradient(90deg, #d9b44a, #fff3c4, #d9b44a); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 4s linear infinite; }
-
-/* Muncul saat di-scroll (dipakai komponen Reveal) */
-.reveal { opacity: 0; }
-.reveal.in { opacity: 1; animation: fadeUp .7s ease-out backwards; animation-delay: var(--d, 0s); }
-
-/* Setiap halaman masuk dengan fade-up bertahap */
-main > *:not(.reveal), main > * > *:not(.reveal) { animation: fadeUp .5s ease-out backwards; }
-main > * > *:nth-child(2) { animation-delay: .06s; }
-main > * > *:nth-child(3) { animation-delay: .12s; }
-main > * > *:nth-child(4) { animation-delay: .18s; }
-main > * > *:nth-child(5) { animation-delay: .24s; }
-main > * > *:nth-child(6) { animation-delay: .30s; }
-main > * > *:nth-child(7) { animation-delay: .36s; }
-main > * > *:nth-child(8) { animation-delay: .42s; }
-
-/* Kartu dalam grid terangkat saat disentuh */
-.grid > .card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -14px rgba(11, 34, 80, .28); border-color: rgba(201, 162, 39, .45); }
-
-/* Baris tabel */
-tbody tr { transition: background-color .15s ease; }
-tbody tr:hover > td { background-color: rgba(238, 243, 251, .6); }
-
-/* Header atas (halaman publik dan portal ormas) */
-header.border-b-4.border-gold-500 { position: sticky; top: 0; z-index: 30; background-image: linear-gradient(110deg, #0b2250, #143a7a 55%, #0f2f66); box-shadow: 0 6px 20px -8px rgba(11, 34, 80, .5); }
-
-/* ===== Latar dua foto bergradasi =====
-   Foto ada di client/public: bg-tugu.jpg (kiri) dan bg-malioboro.jpg (kanan).
-   Tanpa foto, latar tetap tampil sebagai gradasi biru. */
-:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900) {
-  position: relative; isolation: isolate; overflow: hidden;
-  background-image: linear-gradient(135deg, #0b2250, #143a7a);
-}
-:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::before,
-:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::after {
-  content: ""; position: absolute; inset: -5%; z-index: -1; pointer-events: none;
-  background-size: cover; background-position: center;
-  animation: kenburns 26s ease-in-out infinite alternate;
-}
-:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::before {
-  background-image: linear-gradient(160deg, rgba(11, 34, 80, .78), rgba(15, 47, 102, .42)), url('/bg-tugu.jpg');
-  -webkit-mask-image: linear-gradient(105deg, #000 0%, #000 30%, transparent 72%);
-  mask-image: linear-gradient(105deg, #000 0%, #000 30%, transparent 72%);
-}
-:is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::after {
-  background-image: linear-gradient(200deg, rgba(11, 34, 80, .55), rgba(168, 134, 28, .30)), url('/bg-malioboro.jpg');
-  -webkit-mask-image: linear-gradient(105deg, transparent 28%, #000 70%, #000 100%);
-  mask-image: linear-gradient(105deg, transparent 28%, #000 70%, #000 100%);
-}
-@media (max-width: 767px) {
-  :is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::before { -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%, transparent 75%); mask-image: linear-gradient(180deg, #000 0%, #000 30%, transparent 75%); }
-  :is(.photo-blend, div.grid.min-h-screen.place-items-center.bg-navy-900)::after { -webkit-mask-image: linear-gradient(180deg, transparent 25%, #000 70%, #000 100%); mask-image: linear-gradient(180deg, transparent 25%, #000 70%, #000 100%); }
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 11 17 32; --surface: 23 35 56; --raised: 28 42 64; --soft: 37 52 78;
+  --ink: 241 245 249; --body: 213 222 234; --muted: 148 163 184; --link: 216 191 138;
+  --gold: 198 169 107; --gold-soft: 216 191 138; --gold-text: 216 191 138;
+  --ok: 110 205 166; --warn: 232 183 92; --bad: 232 138 138; --info: 138 180 232;
+  --line: rgba(255, 255, 255, .08);
+  --glass: rgba(20, 32, 52, .68); --glass-strong: rgba(22, 34, 55, .97); --glass-edge: rgba(255, 255, 255, .08);
+  --shadow: 0 12px 40px rgba(0, 0, 0, .16), inset 0 1px 0 rgba(255, 255, 255, .04);
+  --shadow-lift: 0 20px 50px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .07);
+  --glow-1: rgba(48, 86, 150, .34); --glow-2: rgba(198, 169, 107, .11); --glow-3: rgba(40, 112, 140, .16);
 }
 
-/* Kartu login: kaca buram */
-div.grid.min-h-screen.place-items-center.bg-navy-900 > .card {
-  background: rgba(255, 255, 255, .93);
-  -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, .55); border-radius: 1rem;
-  box-shadow: 0 25px 60px -15px rgba(5, 15, 40, .6);
-  animation: cardIn .7s cubic-bezier(.2, .8, .2, 1) backwards;
+/* ---------- 2. Latar ---------- */
+html { -webkit-text-size-adjust: 100%; background: rgb(var(--bg)); }
+body { @apply font-sans text-body antialiased; padding-bottom: env(safe-area-inset-bottom); overflow-wrap: break-word; }
+/* Cahaya ambien (statis) + butiran halus */
+body::before, body::after { content: ''; position: fixed; inset: 0; pointer-events: none; }
+body::before {
+  z-index: -2;
+  background:
+    radial-gradient(60vw 46vh at 88% -6%, var(--glow-1), transparent 70%),
+    radial-gradient(42vw 40vh at 4% 8%, var(--glow-2), transparent 70%),
+    radial-gradient(56vw 52vh at 38% 108%, var(--glow-3), transparent 70%),
+    rgb(var(--bg));
 }
-div.grid.min-h-screen.place-items-center.bg-navy-900 > .card span.bg-gold-500 { animation: glow 3s ease-out infinite; }
-
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
-
-html { -webkit-text-size-adjust: 100%; }
+body::after {
+  z-index: -1; opacity: .32; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+h1, h2, h3, h4 { @apply text-ink; letter-spacing: -.012em; }
 img, video, iframe { max-width: 100%; }
-body { padding-bottom: env(safe-area-inset-bottom); overflow-wrap: anywhere; }
+::selection { background: rgb(var(--gold) / .3); }
+:focus-visible { outline: 2px solid rgb(var(--gold)); outline-offset: 2px; }
+
+@layer components {
+  /* ---------- 3. Permukaan ---------- */
+  .card {
+    @apply rounded-2xl; background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(18px) saturate(145%); backdrop-filter: blur(18px) saturate(145%);
+    transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease;
+  }
+  /* Konten padat teks (tabel, form) memakai permukaan nyaris solid, tanpa blur */
+  .card-solid { @apply card; background: rgb(var(--surface)); border-color: var(--line); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .card-lift:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: rgb(var(--gold) / .4); }
+  .panel { @apply rounded-xl border border-line p-4; background: rgb(var(--soft) / .28); }
+
+  .eyebrow { @apply text-[11px] font-bold uppercase; letter-spacing: .18em; color: rgb(var(--gold-text)); }
+  .page-title { @apply text-2xl font-extrabold text-ink md:text-[28px]; letter-spacing: -.025em; }
+  .card-title { @apply text-[15px] font-bold text-ink; }
+  .page-sub { @apply mt-1 max-w-2xl text-sm text-muted; }
+  .form-h { @apply mt-3 flex items-center gap-3 text-sm font-bold text-ink md:col-span-2; }
+  .form-h::before { content: ''; width: 3px; height: 1.05em; border-radius: 9px; background: linear-gradient(rgb(var(--gold-soft)), rgb(var(--gold))); }
+  .form-h::after { content: ''; height: 1px; flex: 1; background: var(--line); }
+
+  /* ---------- 4. Kontrol ---------- */
+  .inp {
+    @apply w-full rounded-[10px] px-3 py-2 text-sm text-body; min-height: 2.5rem;
+    background-color: rgb(var(--surface)); border: 1px solid var(--line); box-shadow: inset 0 1px 2px rgb(0 0 0 / .04);
+    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+  }
+  [data-theme='dark'] .inp { background-color: rgb(11 17 32 / .55); }
+  .inp::placeholder { color: rgb(var(--muted) / .75); }
+  .inp:hover { border-color: rgb(var(--muted) / .45); }
+  .inp:focus { outline: none; border-color: rgb(var(--gold)); box-shadow: 0 0 0 3px rgb(var(--gold) / .22); }
+  .inp:disabled { @apply cursor-not-allowed opacity-60; }
+  .inp:user-invalid { border-color: rgb(var(--bad)); box-shadow: 0 0 0 3px rgb(var(--bad) / .16); }
+  .lbl { @apply mb-1.5 block text-[13px] font-semibold text-ink; }
+  .readonly { @apply rounded-[10px] border border-dashed border-line px-3 py-2 text-sm text-muted; background: rgb(var(--soft) / .4); }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-4 py-2 text-sm font-semibold;
+    border: 1px solid transparent; transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, color .18s ease, filter .18s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { @apply cursor-not-allowed opacity-50; transform: none; }
+  /* Utama: navy di tema terang, emas champagne di tema gelap */
+  .btn-p { @apply btn text-white; background: linear-gradient(140deg, #243656, #172338); border-color: rgb(198 169 107 / .38); box-shadow: 0 8px 20px -12px rgb(11 17 32 / .7), inset 0 1px 0 rgb(255 255 255 / .1); }
+  .btn-p:hover { border-color: rgb(198 169 107 / .8); filter: brightness(1.14); }
+  [data-theme='dark'] .btn-p { color: #0B1120; background: linear-gradient(140deg, #E2CC9C, #C6A96B); box-shadow: 0 10px 26px -14px rgb(198 169 107 / .8), inset 0 1px 0 rgb(255 255 255 / .35); }
+  .btn-g { @apply btn; color: #0B1120; background: linear-gradient(140deg, #E2CC9C, #C0A263); box-shadow: 0 10px 26px -14px rgb(185 154 91 / .9), inset 0 1px 0 rgb(255 255 255 / .35); }
+  .btn-g:hover { filter: brightness(1.06); }
+  .btn-o { @apply btn border-line text-body; background: rgb(var(--surface) / .6); }
+  .btn-o:hover { border-color: rgb(var(--gold) / .55); background: rgb(var(--soft) / .7); }
+  .btn-d { @apply btn text-bad; background: rgb(var(--bad) / .1); border-color: rgb(var(--bad) / .35); }
+  .btn-d:hover { background: rgb(var(--bad) / .2); }
+  .btn-glass { @apply btn text-white; background: rgb(255 255 255 / .09); border-color: rgb(255 255 255 / .22); }
+  .btn-glass:hover { background: rgb(255 255 255 / .17); }
+  .icon-btn { @apply btn-o; width: 2.25rem; height: 2.25rem; padding: 0; min-height: 0; }
+  .txt-link { @apply font-semibold text-link underline-offset-4 hover:underline; }
+
+  /* Lencana */
+  .chip { @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold; border: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 24%, transparent); background: color-mix(in srgb, currentColor 10%, transparent); }
+  .chip-dot::before { content: ''; width: 6px; height: 6px; border-radius: 9px; background: currentColor; }
+  .chip-n { @apply chip text-muted; }
+  .note { @apply rounded-xl border p-3 text-sm text-body; }
+  .note-info { @apply note border-info/30 bg-info/10; }
+  .note-warn { @apply note border-warn/30 bg-warn/10; }
+  .note-bad { @apply note border-bad/30 bg-bad/10; }
+
+  /* Kotak unggah */
+  .drop { @apply rounded-xl border border-dashed p-3.5; border-color: rgb(var(--muted) / .35); background: rgb(var(--soft) / .22); transition: border-color .2s ease, background-color .2s ease; }
+  .drop:hover, .drop:focus-within { border-color: rgb(var(--gold) / .8); }
+  .drop-on { border-style: solid; border-color: rgb(var(--ok) / .4); background: rgb(var(--ok) / .07); }
+
+  /* ---------- 5. Data ---------- */
+  .th { @apply whitespace-nowrap px-3.5 py-3 text-left text-[11px] font-bold uppercase text-muted; letter-spacing: .07em; }
+  .td { @apply px-3.5 py-3 align-middle text-sm; }
+  .tbl { @apply w-full; }
+  .tbl thead { background: rgb(var(--soft) / .5); border-bottom: 1px solid var(--line); }
+  .tbl tbody tr { border-top: 1px solid var(--line); transition: background-color .18s ease, box-shadow .18s ease; }
+  .tbl tbody tr:hover { background: rgb(var(--gold) / .07); box-shadow: inset 3px 0 0 rgb(var(--gold)); }
+  .mono { @apply font-mono text-[13px]; }
+  .tbl-dense .th { padding-left: .5rem; padding-right: .5rem; white-space: normal; letter-spacing: .04em; vertical-align: bottom; }
+  .tbl-dense .td { padding-left: .5rem; padding-right: .5rem; }
+}
+
+input[type='checkbox'], input[type='radio'] { width: 1rem; height: 1rem; flex-shrink: 0; accent-color: rgb(var(--gold)); }
+input[type='file'] { @apply text-xs text-muted; max-width: 100%; }
+input[type='file']::file-selector-button { @apply mr-3 cursor-pointer rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink; background: rgb(var(--surface)); transition: border-color .18s ease; }
+input[type='file']::file-selector-button:hover { border-color: rgb(var(--gold)); }
+select.inp { appearance: none; padding-right: 2.25rem; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .75rem center; }
+select option { background: rgb(var(--surface)); color: rgb(var(--body)); }
+
+.skel { border-radius: 10px; background: linear-gradient(100deg, rgb(var(--soft) / .45) 30%, rgb(var(--soft) / .9) 50%, rgb(var(--soft) / .45) 70%); background-size: 220% 100%; animation: shimmer 1.4s linear infinite; }
+.spinner { width: 1rem; height: 1rem; border-radius: 999px; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; }
+
+/* Grafik */
+.recharts-text { fill: rgb(var(--muted)); font-size: 12px; }
+.recharts-cartesian-grid line { stroke: var(--line); }
+.recharts-tooltip-cursor { fill: rgb(var(--gold) / .08); }
+.chart-tip { @apply rounded-xl border border-line px-3 py-2 text-xs shadow-xl; background: var(--glass-strong); }
+
+@layer components {
+/* ---------- 6. Overlay ---------- */
+.overlay { background: rgb(5 10 20 / .56); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fadeIn .2s ease both; }
+.dialog { @apply w-full rounded-2xl; background: var(--glass-strong); border: 1px solid var(--glass-edge); box-shadow: 0 32px 80px -24px rgb(0 0 0 / .55), inset 0 1px 0 rgb(255 255 255 / .05); animation: dialogIn .26s cubic-bezier(.2, .8, .2, 1) both; }
+.drawer { @apply flex h-full w-full flex-col; max-width: 46rem; background: var(--glass-strong); border-left: 1px solid var(--glass-edge); box-shadow: -30px 0 70px -30px rgb(0 0 0 / .6); animation: drawerIn .3s cubic-bezier(.2, .8, .2, 1) both; }
+.popover { @apply rounded-2xl; background: rgb(var(--raised)); border: 1px solid var(--line); box-shadow: 0 24px 60px -20px rgb(0 0 0 / .45); animation: dialogIn .2s ease both; }
+.toast { @apply flex items-start gap-3 rounded-xl px-4 py-3 text-sm text-white; background: rgb(17 27 45 / .95); border: 1px solid rgb(255 255 255 / .1); box-shadow: 0 18px 40px -16px rgb(0 0 0 / .55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: toastIn .26s ease both; }
+
+/* ---------- 7. Navigasi ---------- */
+.sidebar { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(22px) saturate(145%); backdrop-filter: blur(22px) saturate(145%); }
+.nav-item { @apply relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-muted; transition: color .2s ease, background-color .2s ease; }
+.nav-item:hover { color: rgb(var(--ink)); background: rgb(var(--soft) / .5); }
+.nav-item svg { flex-shrink: 0; transition: color .2s ease; }
+.nav-item.active { @apply font-semibold text-ink; background: linear-gradient(90deg, rgb(var(--gold) / .2), rgb(var(--gold) / .04)); }
+.nav-item.active svg { color: rgb(var(--gold-text)); }
+.nav-item.active::before { content: ''; position: absolute; left: 0; top: 22%; bottom: 22%; width: 3px; border-radius: 0 6px 6px 0; background: rgb(var(--gold)); box-shadow: 0 0 12px rgb(var(--gold) / .8); }
+.topbar { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(20px) saturate(145%); backdrop-filter: blur(20px) saturate(145%); }
+.brand-mark { display: grid; place-items: center; flex-shrink: 0; border-radius: 12px; color: #0B1120; background: linear-gradient(145deg, #EBD9AE, #B99A5B); box-shadow: 0 8px 20px -10px rgb(198 169 107 / .9), inset 0 1px 0 rgb(255 255 255 / .5); }
+
+/* ---------- 8. Halaman publik dan login ---------- */
+.pub-link { @apply relative rounded-lg px-3 py-2 text-sm font-semibold text-muted transition-colors hover:text-ink; }
+.pub-link.active { @apply text-ink; }
+.pub-link.active::after { content: ''; position: absolute; left: .75rem; right: .75rem; bottom: .2rem; height: 2px; border-radius: 2px; background: rgb(var(--gold)); }
+.display { @apply font-serif font-medium; letter-spacing: -.022em; line-height: 1.08; text-wrap: balance; }
+.photo { position: absolute; inset: 0; background-size: cover; background-position: center; }
+
+/* Panel gelap di atas foto: selalu memakai token gelap */
+.cinema { position: relative; isolation: isolate; overflow: hidden; background: #0B1120; color: #F1F5F9; }
+}
+
+/* Tabel lebar di desktop: kolom Aksi menempel di kanan agar selalu terjangkau */
+@media (min-width: 768px) {
+  .tbl .col-act { position: sticky; right: 0; z-index: 1; background: rgb(var(--surface)); box-shadow: -10px 0 14px -14px rgb(0 0 0 / .6); }
+  .tbl thead .col-act { background: rgb(var(--raised)); }
+}
+
+/* ---------- 9. Gerak ---------- */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialogIn { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes drawerIn { from { opacity: .4; transform: translateX(48px); } to { opacity: 1; transform: none; } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.anim-fade-up { animation: fadeUp .5s cubic-bezier(.2, .8, .2, 1) both; }
+.anim-d1 { animation-delay: .08s; }
+.anim-d2 { animation-delay: .16s; }
+.anim-d3 { animation-delay: .24s; }
+.reveal { opacity: 0; }
+.reveal.in { opacity: 1; animation: fadeUp .55s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: var(--d, 0s); }
+.stagger > * { animation: fadeUp .42s cubic-bezier(.2, .8, .2, 1) backwards; }
+.stagger > *:nth-child(2) { animation-delay: .05s; }
+.stagger > *:nth-child(3) { animation-delay: .1s; }
+.stagger > *:nth-child(4) { animation-delay: .15s; }
+.stagger > *:nth-child(5) { animation-delay: .2s; }
+.stagger > *:nth-child(6) { animation-delay: .25s; }
+.stagger > *:nth-child(n+7) { animation-delay: .3s; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } .reveal { opacity: 1; } }
+
+/* ---------- 10. Responsif ---------- */
 @media (max-width: 767px) {
   .inp { font-size: 16px; } /* cegah zoom otomatis di iPhone */
   .btn { min-height: 2.5rem; }
-  .th, .td { padding-left: .5rem; padding-right: .5rem; }
-  main { padding-left: .75rem; padding-right: .75rem; }
+  .icon-btn { width: 2.5rem; height: 2.5rem; }
+  .card, .sidebar { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  /* Tabel menjadi daftar kartu; label kolom diambil dari data-label */
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td { display: block; width: 100%; min-width: 0 !important; }
+  .tbl tbody tr { padding: .75rem .25rem; }
+  .tbl tbody tr:first-child { border-top: 0; }
+  .tbl td { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: .75rem; padding: .3rem .75rem; white-space: normal; overflow-wrap: anywhere; }
+  .tbl td::before { content: attr(data-label); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: rgb(var(--muted)); padding-top: .15rem; }
+  .tbl td > div { min-width: 0; }
 }
-@media (min-width: 1536px) { main { max-width: 1700px; margin-inline: auto; } }
+@media print { body::before, body::after { display: none; } }
