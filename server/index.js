@@ -1,4 +1,3 @@
-
 import { findBad } from './inputfilter.js';
 import ExcelJS from 'exceljs';
 import 'dotenv/config';
@@ -19,6 +18,7 @@ import { db, DATA_DIR, SECRET, PERMS, getSetting as S, setSetting } from './db.j
 import { driveOn, driveUpload, driveDownload, driveDelete, driveOrganize, driveDeleteFolder } from './drive.js';
 import { backupDb } from './backup.js';
 import { setupFitur, notify, withExpiry, expiryInfo, dokKedaluwarsa, sessionAktif, cekKedaluwarsa } from './fitur.js';
+import { setupRevisi, legalStats } from './revisi.js';
 import { createHardening, passwordError, PW_MSG } from './hardening.js';
 
 try { dns.setDefaultResultOrder?.('ipv4first'); } catch {} // jaringan dengan IPv6 bermasalah tidak membuat koneksi ke Gmail/Drive macet
@@ -57,6 +57,15 @@ const igUrl = (v) => {
   const u = v.replace(/^@/, '').replace(/^(www\.)?instagram\.com\//i, '').replace(/[/?#].*$/, '');
   return /^[A-Za-z0-9._]{1,30}$/.test(u) ? `https://www.instagram.com/${u}/` : v;
 };
+// Masking nomor telepon pribadi Ketua untuk katalog publik (dilakukan di server): 081234567823 -> 08********23
+const maskTelp = (v) => {
+  const s = String(v || '').replace(/\s+/g, '').trim();
+  if (!s) return '';
+  return s.length <= 4 ? '*'.repeat(s.length) : s.slice(0, 2) + '*'.repeat(s.length - 4) + s.slice(-2);
+};
+// Jika Ormas menyatakan belum memiliki Legal Standing, isian dokumen Legal Standing dikosongkan (status tetap tersimpan)
+const LEGAL_FIELDS = ['legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd'];
+const clearLegal = (r) => { if (r.legal_status === 'tidak') LEGAL_FIELDS.forEach((k) => { r[k] = ''; }); return r; };
 const KEMANTREN = ['Danurejan', 'Gedongtengen', 'Gondokusuman', 'Gondomanan', 'Jetis', 'Kotagede', 'Kraton', 'Mantrijeron', 'Mergangsan', 'Ngampilan', 'Pakualaman', 'Tegalrejo', 'Umbulharjo', 'Wirobrajan'];
 const DOC_ST = ['Lengkap', 'Belum Lengkap', 'Perlu Diverifikasi', 'Tidak Berlaku', 'Kedaluwarsa'];
 const OPS_ST = ['Aktif', 'Tidak Aktif'];
@@ -250,6 +259,10 @@ function listOrmas(q, { pub = false, paginate = true } = {}) {
   if (q.kategori_id) { w.push('o.kategori_id=?'); p.push(+q.kategori_id); }
   if (q.status_dokumen) { w.push('o.status_dokumen=?'); p.push(String(q.status_dokumen)); }
   if (!pub && q.status_operasional) { w.push('o.status_operasional=?'); p.push(String(q.status_operasional)); }
+  // Filter status Legal Standing (admin): ya | tidak | belum_diisi
+  if (!pub && q.legal_status === 'ya') w.push(`o.legal_status='ya'`);
+  else if (!pub && q.legal_status === 'tidak') w.push(`o.legal_status='tidak'`);
+  else if (!pub && q.legal_status === 'belum_diisi') w.push(`coalesce(o.legal_status,'') not in ('ya','tidak')`);
   const where = w.length ? 'where ' + w.join(' and ') : '';
   const order = `order by ${SORTS[q.sort] || 'o.id'} ${q.dir === 'desc' ? 'desc' : 'asc'}, o.id asc`;
   const from = 'from ormas o join kategori k on k.id=o.kategori_id';
@@ -268,8 +281,9 @@ app.get('/api/public/ormas', (req, res) => {
 });
 
 app.get('/api/public/ormas/:kode', (req, res) => {
-  const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.link_youtube,o.link_tiktok,o.cp_bagian,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
+  const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.telepon_ormas,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.link_youtube,o.link_tiktok,o.cp_bagian,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
   if (!o || S('catalog_public') !== 'true') return res.status(404).json({ error: 'Data ormas tidak ditemukan' });
+  o.nomor_whatsapp_ketua = maskTelp(o.nomor_whatsapp_ketua); // nomor pribadi Ketua disamarkan di server; nomor Ormas tampil normal
   o.docs = db.prepare(`select id,jenis_dokumen,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and klasifikasi_akses='kredensial' and jenis_dokumen is not null and pending=0 order by id`).all(o.id);
   o.company_profile = db.prepare(`select id,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and jenis_dokumen='company_profile' and pending=0 order by id desc limit 1`).get(o.id) || null;
   res.json(o);
@@ -422,7 +436,7 @@ app.post('/api/auth/reset', forgotLimiter, (req, res) => {
 
 // ===== Portal ormas: akun TETAP milik ormas (terpisah dari kredensial harian PDF) =====
 const portalLimiter = limiter();
-const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
+const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'telepon_ormas', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_status', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 const portalUser = (kode) => kode.toLowerCase().replace('-', '');
 function newPortalAccount(ormasId, kode) {
   const password = rnd(10), username = portalUser(kode);
@@ -508,6 +522,7 @@ app.put('/api/portal/profile', portalAuth(), uploadPending, (req, res) => {
   const err = validateOrmas(b); if (err) return fail(req, res, err);
   const vals = Object.fromEntries(PORTAL_FIELDS.map((k) => [k, k === 'email_ormas' ? String(b[k] ?? '').trim().toLowerCase() : String(b[k] ?? '').trim()]));
   vals.link_instagram = igUrl(vals.link_instagram);
+  clearLegal(vals); // status "TIDAK" mengosongkan isian dokumen Legal Standing; statusnya tetap tersimpan
   const ex = pendingOf(o.id);
   const exDocs = db.prepare('select * from dokumen_ormas where ormas_id=? and pending=1').all(o.id);
   const wantRemove = b.remove_logo === '1' && !logo && !!o.logo_key;
@@ -611,21 +626,25 @@ app.get('/api/admin/dashboard', auth('view_ormas'), (req, res) => {
     perlu_verifikasi: db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.updated_at,k.nama_kategori ${base} where o.status_dokumen='Perlu Diverifikasi' order by o.updated_at desc limit 5`).all(),
     // Dokumen kedaluwarsa dihitung dari tanggal "Berlaku s/d" SKTO dan legal standing (bukan dari status manual)
     dok_kedaluwarsa: { sudah: dk.sudah, segera: dk.segera, tidak_terbaca: dk.tidak_terbaca.length, items: dk.items.slice(0, 6) },
+    legal_standing: legalStats(), // jumlah Ormas yang sudah / belum memiliki Legal Standing + peringatan di dashboard
     last_update: db.prepare('select max(updated_at) m from ormas').get().m,
   });
 });
 
 // --- Data ormas ---
-const TEXT_FIELDS = { nama_ketua: 150, sekretaris: 150, bendahara: 150, nomor_whatsapp_ketua: 25, email_ormas: 120, alamat: 500, bentuk: 100, bidang_kegiatan: 300, legal_jenis: 100, nomor_sk: 100, legal_tahun: 4, legal_berlaku_sd: 50, skto_nomor: 100, skto_tahun: 4, skto_berlaku_sd: 50, validasi: 100, catatan_verifikasi: 1000, link_dokumentasi: 500, link_instagram: 200, link_youtube: 200, link_tiktok: 200, cp_bagian: 200 };
+const TEXT_FIELDS = { nama_ketua: 150, sekretaris: 150, bendahara: 150, nomor_whatsapp_ketua: 25, telepon_ormas: 25, email_ormas: 120, alamat: 500, bentuk: 100, bidang_kegiatan: 300, legal_status: 10, legal_jenis: 100, nomor_sk: 100, legal_tahun: 4, legal_berlaku_sd: 50, skto_nomor: 100, skto_tahun: 4, skto_berlaku_sd: 50, validasi: 100, catatan_verifikasi: 1000, link_dokumentasi: 500, link_instagram: 200, link_youtube: 200, link_tiktok: 200, cp_bagian: 200 };
+const TELP_RE = /^\+?[0-9][0-9\s-]{7,19}$/;
 function validateOrmas(b) {
   const nama = String(b.nama_ormas || '').trim();
   if (!nama) return 'Nama ormas wajib diisi';
   if (nama.length > 200) return 'Nama ormas terlalu panjang';
   if (!b.kategori_id || !db.prepare('select 1 from kategori where id=?').get(+b.kategori_id)) return 'Kategori wajib dipilih';
   for (const [k, max] of Object.entries(TEXT_FIELDS)) if (String(b[k] || '').trim().length > max) return `Isian "${k.replace(/_/g, ' ')}" terlalu panjang`;
-  const wa = String(b.nomor_whatsapp_ketua || '').trim(), em = String(b.email_ormas || '').trim();
-  if (wa && !/^\+?[0-9][0-9\s-]{7,19}$/.test(wa)) return 'Nomor telepon tidak valid (contoh: 081234567890 atau +6281234567890)';
+  const wa = String(b.nomor_whatsapp_ketua || '').trim(), tp = String(b.telepon_ormas || '').trim(), em = String(b.email_ormas || '').trim();
+  if (wa && !TELP_RE.test(wa)) return 'Nomor Telepon Ketua tidak valid (contoh: 081234567890 atau +6281234567890)';
+  if (tp && !TELP_RE.test(tp)) return 'Nomor Telepon Ormas tidak valid (contoh: 0274123456 atau +62274123456)';
   if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return 'Email ormas tidak valid';
+  if (b.legal_status && !['ya', 'tidak'].includes(String(b.legal_status).trim())) return 'Status Legal Standing harus YA atau TIDAK';
   for (const k of ['legal_tahun', 'skto_tahun']) if (b[k] && !/^(19|20)\d{2}$/.test(String(b[k]).trim())) return 'Tahun harus 4 digit (contoh: 2021)';
   if (b.kemantren && !KEMANTREN.includes(b.kemantren)) return 'Kemantren tidak valid';
   if (b.validasi && !VALIDASI.includes(b.validasi)) return 'Status validasi harus Terdata, Terdaftar, atau Teregister';
@@ -655,6 +674,7 @@ const rowOf = (b, d = {}) => {
   for (const k of Object.keys(TEXT_FIELDS)) r[k] = String(b[k] ?? '').trim();
   r.email_ormas = r.email_ormas.toLowerCase();
   r.link_instagram = igUrl(r.link_instagram);
+  clearLegal(r);
   for (const k of INT_FIELDS) { const v = String(b[k] ?? '').trim(); r[k] = v === '' ? null : +v; }
   r.status_dokumen = b.status_dokumen || d.status_dokumen || 'Belum Lengkap';
   r.status_operasional = b.status_operasional || d.status_operasional || 'Aktif';
@@ -768,12 +788,12 @@ app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
   const logo = req.files?.logo?.[0], docs = uploadedDocs(req).filter(([j]) => j !== 'skto'); // pendaftar tidak mengunggah SKTO
   const kat = String(b.kategori_nama || '').trim().replace(/\s+/g, ' ');
   // Ketentuan pendaftaran: logo PNG/JPG/JPEG maks. 1 MB, semua kolom wajib terisi, AD/ART dan Company Profile wajib diunggah
-  const kosong = [['bentuk', 'Bentuk ormas'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['email_ormas', 'Email ormas'], ['anggota_total', 'Total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas']].find(([k]) => !String(b[k] ?? '').trim());
+  const kosong = [['bentuk', 'Bentuk ormas'], ['bidang_kegiatan', 'Bidang kegiatan'], ['kemantren', 'Kemantren'], ['sekretaris', 'Sekretaris'], ['bendahara', 'Bendahara'], ['telepon_ormas', 'Nomor Telepon Ormas'], ['email_ormas', 'Email ormas'], ['anggota_total', 'Total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas']].find(([k]) => !String(b[k] ?? '').trim());
   const err0 = !logo ? 'Logo ormas wajib diunggah' : !['image/png', 'image/jpeg'].includes(logo.mimetype) ? 'Logo harus berformat PNG, JPG, atau JPEG' : logo.size > 1048576 ? 'Ukuran logo maksimal 1 MB'
     : kosong ? `${kosong[1]} wajib diisi` : !docs.some(([j]) => j === 'adart') ? 'Dokumen AD/ART wajib diunggah' : !docs.some(([j]) => j === 'company_profile') ? 'Company Profile wajib diunggah' : null;
   if (err0) return fail(req, res, err0);
   const err = !kid ? 'Sistem belum siap menerima pendaftaran' : !kat || kat.length > 100 ? 'Kategori wajib diisi (maks. 100 karakter)'
-    : validateOrmas(b) || (!waNumber(b.nomor_whatsapp_ketua) ? 'Nomor WhatsApp ketua wajib diisi dengan benar (contoh: 081234567890)' : !String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
+    : validateOrmas(b) || (!waNumber(b.nomor_whatsapp_ketua) ? 'Nomor Telepon Ketua wajib diisi dengan benar (contoh: 081234567890)' : !String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
   if (err) return fail(req, res, err);
   const nama = String(b.nama_ormas).trim();
   if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjut'`).get(nama, nama))
@@ -1031,9 +1051,10 @@ const sendXlsx = async (res, name, header, rows) => {
 app.get('/api/admin/export/ormas', auth('export'), (req, res) => {
   const { items } = listOrmas(req.query, { paginate: false });
   log(req, 'ekspor_csv', null, `Ekspor Excel ${items.length} data ormas`);
+  const LS = { ya: 'Sudah memiliki', tidak: 'Belum memiliki' };
   sendXlsx(res, `data-ormas-${today()}.xlsx`,
-    ['ID Ormas', 'Nama Ormas', 'Bidang (Kategori)', 'Bentuk', 'Bidang Kegiatan', 'Kemantren', 'Alamat Kantor/Sekretariat', 'Nomor Telepon', 'Email Ormas', 'Ketua', 'Sekretaris', 'Bendahara', 'Legal Standing - Jenis', 'Legal Standing - Nomor', 'Legal Standing - Tahun', 'Legal Standing - Berlaku s/d', 'SKTO - Nomor', 'SKTO - Tahun', 'SKTO - Berlaku s/d', 'Status Validasi', 'Jumlah Anggota', 'Anggota Perempuan', 'Anggota Lansia', 'Anggota Disabilitas', 'Link Dokumentasi', 'Instagram', 'Status Dokumen', 'Status Operasional', 'Status Publikasi', 'Dokumen Wajib Terunggah (dari 5)', 'Tanggal Dibuat', 'Tanggal Diperbarui'],
-    items.map((o) => [o.kode_ormas, o.nama_ormas, o.nama_kategori, o.bentuk, o.bidang_kegiatan, o.kemantren, o.alamat, o.nomor_whatsapp_ketua, o.email_ormas, o.nama_ketua, o.sekretaris, o.bendahara, o.legal_jenis, o.nomor_sk, o.legal_tahun, o.legal_berlaku_sd, o.skto_nomor, o.skto_tahun, o.skto_berlaku_sd, o.validasi, o.anggota_total, o.anggota_perempuan, o.anggota_lansia, o.anggota_disabilitas, o.link_dokumentasi, o.link_instagram, o.status_dokumen, o.status_operasional, o.status_publikasi, o.jumlah_dok, o.created_at, o.updated_at]));
+    ['ID Ormas', 'Nama Ormas', 'Bidang (Kategori)', 'Bentuk', 'Bidang Kegiatan', 'Kemantren', 'Alamat Kantor/Sekretariat', 'Nomor Telepon Ketua', 'Nomor Telepon Ormas', 'Email Ormas', 'Ketua', 'Sekretaris', 'Bendahara', 'Status Legal Standing', 'Legal Standing - Jenis', 'Legal Standing - Nomor', 'Legal Standing - Tahun', 'Legal Standing - Berlaku s/d', 'SKTO - Nomor', 'SKTO - Tahun', 'SKTO - Berlaku s/d', 'Status Validasi', 'Jumlah Anggota', 'Anggota Perempuan', 'Anggota Lansia', 'Anggota Disabilitas', 'Link Dokumentasi', 'Instagram', 'Status Dokumen', 'Status Operasional', 'Status Publikasi', 'Dokumen Wajib Terunggah (dari 5)', 'Tanggal Dibuat', 'Tanggal Diperbarui'],
+    items.map((o) => [o.kode_ormas, o.nama_ormas, o.nama_kategori, o.bentuk, o.bidang_kegiatan, o.kemantren, o.alamat, o.nomor_whatsapp_ketua, o.telepon_ormas, o.email_ormas, o.nama_ketua, o.sekretaris, o.bendahara, LS[o.legal_status] || 'Belum diisi', o.legal_jenis, o.nomor_sk, o.legal_tahun, o.legal_berlaku_sd, o.skto_nomor, o.skto_tahun, o.skto_berlaku_sd, o.validasi, o.anggota_total, o.anggota_perempuan, o.anggota_lansia, o.anggota_disabilitas, o.link_dokumentasi, o.link_instagram, o.status_dokumen, o.status_operasional, o.status_publikasi, o.jumlah_dok, o.created_at, o.updated_at]));
 });
 app.get('/api/admin/export/credentials', auth('export_credentials'), (req, res) => {
   if (req.query.confirm !== 'yes') return res.status(400).json({ error: 'Konfirmasi diperlukan' });
@@ -1160,6 +1181,8 @@ app.put('/api/admin/categories', auth('manage_settings'), (req, res) => {
 
 // --- Fitur tambahan: notifikasi admin, notifikasi HP, dokumen kedaluwarsa, cek sesi PDF ---
 setupFitur({ app, auth });
+// --- Revisi Batch 4-7: monitoring Legal Standing, dashboard Ormas, notifikasi Ormas, laporan kegiatan tahunan ---
+setupRevisi({ app, auth, portalAuth, log, portalWho });
 
 // ---------- Static & error ----------
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));
