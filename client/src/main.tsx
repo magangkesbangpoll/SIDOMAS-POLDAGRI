@@ -4,12 +4,14 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
 import './inputfilter'; // filter input otomatis di semua form
 import { ToastProvider } from './ui';
+import { ThemeSync } from './theme';
 import { About, Catalog, OrmasPublic } from './pages/Public';
 import { Home, PublicLayout } from './pages/Landing';
 import { AdminShell } from './pages/Admin';
 import { Forgot, Login, Reset } from './pages/AdminAuth';
 import { PortalForgot, PortalHome, PortalLogin, PortalReset } from './pages/Portal';
-import { Dashboard, OrmasPage } from './pages/AdminOrmas';
+import { OrmasPage } from './pages/AdminOrmas';
+import { Dashboard } from './pages/Dashboard';
 import { Daftar } from './pages/Daftar';
 import { PendaftaranPage } from './pages/AdminPendaftaran';
 import { ExpiredPage, NotifPage } from './pages/Notifikasi';
@@ -20,6 +22,7 @@ if ('serviceWorker' in navigator) window.addEventListener('load', () => navigato
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <BrowserRouter>
+    <ThemeSync />
     <ToastProvider>
       <Routes>
         <Route element={<PublicLayout />}>

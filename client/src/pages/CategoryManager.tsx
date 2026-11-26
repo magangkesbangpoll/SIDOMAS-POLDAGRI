@@ -41,18 +41,18 @@ export function CategoryManager({ initial, onSaved }: { initial: any[]; onSaved?
   return (
     <div className="card space-y-3 p-4">
       <div>
-        <h3 className="font-serif text-lg font-bold text-navy-900">Kategori Bidang</h3>
-        <p className="text-xs text-slate-500">Tambah, ubah nama, ubah urutan, atau hapus kategori. Perubahan baru berlaku setelah menekan SIMPAN. Kategori yang masih dipakai ormas tidak bisa dihapus, nonaktifkan saja.</p>
+        <h3 className="text-lg font-bold text-ink">Kategori Bidang</h3>
+        <p className="text-xs text-muted">Tambah, ubah nama, ubah urutan, atau hapus kategori. Perubahan baru berlaku setelah menekan SIMPAN. Kategori yang masih dipakai ormas tidak bisa dihapus, nonaktifkan saja.</p>
       </div>
       <ul className="space-y-2">
         {rows.map((r, i) => (
-          <li key={r.id ?? `n${i}`} className="flex flex-wrap items-center gap-2 rounded border border-slate-200 p-2">
-            <span className="w-6 text-center text-xs text-slate-500">{i + 1}</span>
+          <li key={r.id ?? `n${i}`} className="panel flex flex-wrap items-center gap-2 !p-2">
+            <span className="w-6 text-center text-xs text-muted">{i + 1}</span>
             <input className="inp min-w-[180px] flex-1" aria-label={`Nama kategori ${i + 1}`} placeholder="Nama kategori" maxLength={80} value={r.nama_kategori} onChange={(e) => edit(i, { nama_kategori: e.target.value })} />
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={r.status_aktif} onChange={(e) => edit(i, { status_aktif: e.target.checked })} />Aktif</label>
             <button type="button" className="btn-o px-2 py-1" title="Naik" aria-label="Naikkan" disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={15} /></button>
             <button type="button" className="btn-o px-2 py-1" title="Turun" aria-label="Turunkan" disabled={i === rows.length - 1} onClick={() => move(i, 1)}><ArrowDown size={15} /></button>
-            <button type="button" className="btn-o px-2 py-1 text-red-600" title="Hapus" aria-label="Hapus" onClick={() => remove(i)}><Trash2 size={15} /></button>
+            <button type="button" className="btn-o px-2 py-1 text-bad" title="Hapus" aria-label="Hapus" onClick={() => remove(i)}><Trash2 size={15} /></button>
           </li>
         ))}
       </ul>

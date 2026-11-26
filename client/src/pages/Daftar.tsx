@@ -7,7 +7,7 @@ import { ADART, BerlakuInput, COMPANY_PROFILE, CompanyProfileGuide, CpChecklist,
 const BENTUK = ['YAYASAN', 'PERKUMPULAN', 'LEMBAGA', 'PAGUYUBAN', 'LAINNYA'];
 const MEM: [string, string][] = [['anggota_total', 'Total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas']];
 const KEYS = ['bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', ...MEM.map(([k]) => k), 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
-const Tag = ({ wajib }: { wajib: boolean }) => <span className={`ml-2 rounded px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase ${wajib ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600'}`}>{wajib ? 'Wajib diisi' : 'Opsional'}</span>;
+const Tag = ({ wajib }: { wajib: boolean }) => <span className={`chip ml-2 align-middle !text-[10px] uppercase ${wajib ? 'text-bad' : 'text-muted'}`}>{wajib ? 'Wajib diisi' : 'Opsional'}</span>;
 
 // Pendaftaran ormas baru (publik). Setiap kolom diberi label "Wajib diisi" atau "Opsional".
 export function Daftar() {
@@ -20,7 +20,7 @@ export function Daftar() {
   const maxMb = meta?.max_pdf_mb || 20;
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
   const T = (k: string, label: string, o: any = {}) => <div className={o.span ? 'md:col-span-2' : ''}><label className="lbl" htmlFor={k}>{label}<Tag wajib={!!o.req} /></label><input id={k} type={o.type || 'text'} className="inp" placeholder={o.ph} maxLength={o.max} required={o.req} value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></div>;
-  const H = (t: string, wajib: boolean) => <h3 className="border-b border-slate-200 pb-1 pt-2 font-serif font-bold text-navy-900 md:col-span-2">{t}<Tag wajib={wajib} /></h3>;
+  const H = (t: string, wajib: boolean) => <h3 className="form-h">{t}<Tag wajib={wajib} /></h3>;
   const pick = (j: string, x?: File) => {
     if (!x) return; if (!docTypeOk(j, x)) return toast(`"${x.name}" format tidak didukung${j === 'company_profile' ? ' (PDF, PPT, atau PPTX)' : ' (harus PDF)'}`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
     setFiles((p) => ({ ...p, [j]: x }));
@@ -44,10 +44,10 @@ export function Daftar() {
     rd.readAsDataURL(x); setLogo(x);
   };
   const FileBox = (j: string, l: string, req = false) => (
-    <div key={j} className={`rounded-md border p-3 ${files[j] ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
+    <div key={j} className={`drop ${files[j] ? 'drop-on' : ''}`}>
       <label className="lbl" htmlFor={'f_' + j}>{l}<Tag wajib={req} /></label>
       <input id={'f_' + j} type="file" accept={docAccept(j)} className="w-full text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
-      {files[j] && <p className="mt-1 text-xs text-slate-600">{files[j].name} ({fmtSize(files[j].size)}) <button type="button" className="text-red-600 underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></p>}
+      {files[j] && <p className="mt-1 text-xs text-muted">{files[j].name} ({fmtSize(files[j].size)}) <button type="button" className="text-bad underline" onClick={() => setFiles((p) => { const n = { ...p }; delete n[j]; return n; })}>batal</button></p>}
     </div>
   );
   const submit = async (e: React.FormEvent) => {
@@ -64,17 +64,18 @@ export function Daftar() {
     try { await api('/public/daftar', { method: 'POST', form: fd }); setDone(true); window.scrollTo(0, 0); } catch (x: any) { toast(x.message, false); } finally { setBusy(false); }
   };
   if (done) return (
-    <div className="mx-auto max-w-xl px-4 py-16 text-center"><CheckCircle2 className="mx-auto text-green-600" size={48} />
-      <h1 className="mt-3 font-serif text-2xl font-bold text-navy-900">Pendaftaran terkirim</h1>
-      <p className="mt-2 text-slate-600">Data ormas Anda sudah masuk dan berstatus <b>Tindak Lanjuti</b>. Setelah admin menyetujui, ormas Anda tampil di katalog dan akun portal diberikan oleh admin.</p>
+    <div className="mx-auto max-w-xl px-4 py-16 text-center"><CheckCircle2 className="mx-auto text-ok" size={48} />
+      <h1 className="mt-3 page-title">Pendaftaran terkirim</h1>
+      <p className="mt-2 text-muted">Data ormas Anda sudah masuk dan berstatus <b>Tindak Lanjuti</b>. Setelah admin menyetujui, ormas Anda tampil di katalog dan akun portal diberikan oleh admin.</p>
       <Link to="/" className="btn-p mt-6 inline-flex">Kembali ke Beranda</Link></div>
   );
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="font-serif text-2xl font-bold text-navy-900">Pendaftaran Ormas Baru</h1>
-      <p className="mt-1 text-sm text-slate-600">Isi data ormas Anda. Data diperiksa admin dan baru tampil di katalog setelah disetujui.</p>
-      <p className="mt-2 text-xs text-slate-600">Keterangan: <Tag wajib /> harus dilengkapi sebelum mengirim. <Tag wajib={false} /> boleh dikosongkan.</p>
-      <form onSubmit={submit} className="card mt-4 grid gap-4 p-4 md:grid-cols-2">
+      <p className="eyebrow">Formulir publik</p>
+      <h1 className="display mt-2 text-3xl text-ink md:text-4xl">Pendaftaran Ormas Baru</h1>
+      <p className="mt-1 text-sm text-muted">Isi data ormas Anda. Data diperiksa admin dan baru tampil di katalog setelah disetujui.</p>
+      <p className="mt-2 text-xs text-muted">Keterangan: <Tag wajib /> harus dilengkapi sebelum mengirim. <Tag wajib={false} /> boleh dikosongkan.</p>
+      <form onSubmit={submit} className="card-solid mt-5 grid gap-4 p-4 sm:p-7 md:grid-cols-2">
         {H('Identitas Ormas', true)}
         {T('nama_ormas', 'Nama ormas', { span: true, max: 200, req: true })}
         <div className="md:col-span-2"><label className="lbl" htmlFor="kat">Kategori / bidang ormas<Tag wajib /></label><input id="kat" className="inp" list="kat-list" maxLength={100} required placeholder="Pilih dari daftar atau ketik kategori sendiri" value={kat} onChange={(e) => setKat(e.target.value)} /><datalist id="kat-list">{(meta?.categories || []).map((c: any) => <option key={c.id} value={c.nama_kategori} />)}</datalist></div>
@@ -87,8 +88,8 @@ export function Daftar() {
         <div className="md:col-span-2">
           <label className="lbl" htmlFor="lg">Unggah logo ormas<Tag wajib /></label>
           <input id="lg" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" className="text-sm" onChange={(e) => { pickLogo(e.target.files?.[0]); e.target.value = ''; }} />
-          <ul className="mt-1 list-disc pl-5 text-xs text-slate-600"><li>Format: PNG, JPG, atau JPEG.</li><li>Rasio gambar 1:1 (persegi), rekomendasi resolusi 512 × 512 px.</li><li>Ukuran ideal di bawah 500 KB, maksimal 1 MB.</li></ul>
-          {logoUrl && <div className="mt-2 flex items-start gap-3"><img src={logoUrl} alt="Pratinjau logo ormas" className="h-24 w-24 rounded border border-slate-200 bg-white object-contain" /><div className="text-xs"><p className="font-semibold">{logo?.name} ({fmtSize(logo?.size || 0)})</p>{logoWarn.map((w) => <p key={w} className="mt-1 rounded bg-amber-50 p-1.5 text-amber-800">⚠ {w}</p>)}<button type="button" className="mt-1 text-red-600 underline" onClick={() => { setLogo(null); setLogoUrl(''); setLogoWarn([]); }}>hapus logo</button></div></div>}
+          <ul className="mt-1 list-disc pl-5 text-xs text-muted"><li>Format: PNG, JPG, atau JPEG.</li><li>Rasio gambar 1:1 (persegi), rekomendasi resolusi 512 × 512 px.</li><li>Ukuran ideal di bawah 500 KB, maksimal 1 MB.</li></ul>
+          {logoUrl && <div className="mt-2 flex items-start gap-3"><img src={logoUrl} alt="Pratinjau logo ormas" className="h-24 w-24 rounded-2xl border border-line bg-white object-contain" /><div className="text-xs"><p className="font-semibold">{logo?.name} ({fmtSize(logo?.size || 0)})</p>{logoWarn.map((w) => <p key={w} className="mt-1 note-warn mt-1 !p-1.5 !text-xs">⚠ {w}</p>)}<button type="button" className="mt-1 text-bad underline" onClick={() => { setLogo(null); setLogoUrl(''); setLogoWarn([]); }}>hapus logo</button></div></div>}
         </div>
 
         {H('Nama Pengurus', true)}
@@ -101,7 +102,7 @@ export function Daftar() {
 
         {H('Jumlah Anggota', true)}
         {MEM.map(([k, l]) => <div key={k}><label className="lbl" htmlFor={k}>{l}<Tag wajib /></label><input id={k} type="number" min={0} max={9999999} step={1} inputMode="numeric" required className="inp" placeholder="0" value={f[k] ?? ''} onChange={(e) => set(k, e.target.value.replace(/\D/g, ''))} /></div>)}
-        <p className="text-xs text-slate-500 md:col-span-2">Isi angka saja (tanpa nama anggota). Isi 0 bila tidak ada. Rincian perempuan, lansia, dan disabilitas boleh saling beririsan, tetapi tiap rincian tidak boleh lebih besar dari total.</p>
+        <p className="text-xs text-muted md:col-span-2">Isi angka saja (tanpa nama anggota). Isi 0 bila tidak ada. Rincian perempuan, lansia, dan disabilitas boleh saling beririsan, tetapi tiap rincian tidak boleh lebih besar dari total.</p>
 
         {H('Dokumen Tambahan', true)}
         <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{FileBox(ADART[0], 'AD/ART (PDF)', true)}{FileBox(COMPANY_PROFILE[0], 'Company Profile ormas (PDF / PPT / PPTX, tampil terbuka di katalog)', true)}</div>

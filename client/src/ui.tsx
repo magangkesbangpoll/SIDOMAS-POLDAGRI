@@ -1,31 +1,46 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, X, XCircle } from 'lucide-react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { CheckCircle2, ChevronLeft, ChevronRight, Inbox, TriangleAlert, X, XCircle } from 'lucide-react';
 import { api } from './api';
 import { onLive } from './live';
 
 export const DOC_STATUS = ['Lengkap', 'Belum Lengkap', 'Perlu Diverifikasi', 'Tidak Berlaku', 'Kedaluwarsa'];
 const BADGE: Record<string, string> = {
-  Lengkap: 'bg-green-100 text-green-800', 'Belum Lengkap': 'bg-orange-100 text-orange-800', 'Perlu Diverifikasi': 'bg-blue-100 text-blue-800',
-  'Tidak Berlaku': 'bg-gray-200 text-gray-700', Kedaluwarsa: 'bg-red-100 text-red-800',
+  Lengkap: 'text-ok', 'Belum Lengkap': 'text-warn', 'Perlu Diverifikasi': 'text-info',
+  'Tidak Berlaku': 'text-muted', Kedaluwarsa: 'text-bad',
 };
-export const STATUS_COLOR: Record<string, string> = { Lengkap: '#16a34a', 'Belum Lengkap': '#f97316', 'Perlu Diverifikasi': '#2563eb', 'Tidak Berlaku': '#9ca3af', Kedaluwarsa: '#dc2626' };
-export const Badge = ({ s }: { s: string }) => <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGE[s] || 'bg-slate-100 text-slate-700'}`}>{s}</span>;
+export const STATUS_COLOR: Record<string, string> = { Lengkap: '#4FAF8B', 'Belum Lengkap': '#D6A04A', 'Perlu Diverifikasi': '#6A93CC', 'Tidak Berlaku': '#8895AA', Kedaluwarsa: '#C86A6E' };
+// `label` hanya mengganti teks yang tampil; warna tetap mengikuti status `s`
+export const Badge = ({ s, label }: { s: string; label?: string }) => <span className={`chip chip-dot ${BADGE[s] || 'text-muted'}`}>{label || s}</span>;
 export const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' }) : '-');
 export const fmtSize = (n: number) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 
-export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  useEffect(() => { const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className={`card my-6 w-full ${wide ? 'max-w-3xl' : 'max-w-md'}`}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h2 className="font-serif text-lg font-bold text-navy-900">{title}</h2>
-          <button onClick={onClose} aria-label="Tutup" className="rounded p-1 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
+// Tumpukan dialog terbuka: tombol Escape hanya menutup yang paling atas, scroll halaman dikunci selama ada dialog.
+const stack: symbol[] = [];
+export function Modal({ title, onClose, children, wide, drawer }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean; drawer?: boolean }) {
+  const id = useRef(Symbol()); const box = useRef<HTMLDivElement>(null); const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    const me = id.current; const before = document.activeElement as HTMLElement | null;
+    stack.push(me); document.body.style.overflow = 'hidden';
+    if (!box.current?.contains(document.activeElement)) box.current?.focus({ preventScroll: true });
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && stack[stack.length - 1] === me) close.current(); };
+    window.addEventListener('keydown', h);
+    return () => { window.removeEventListener('keydown', h); stack.splice(stack.indexOf(me), 1); if (!stack.length) document.body.style.overflow = ''; before?.focus?.({ preventScroll: true }); };
+  }, []);
+  const head = (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+      <h2 className="text-base font-bold">{title}</h2>
+      <button type="button" onClick={onClose} aria-label="Tutup" className="icon-btn"><X size={17} /></button>
     </div>
   );
+  return createPortal(
+    <div className={`overlay fixed inset-0 z-50 flex ${drawer ? 'justify-end' : 'items-start justify-center overflow-y-auto p-3 sm:p-6'}`} role="dialog" aria-modal="true" aria-label={title}
+      onMouseDown={drawer ? (e) => e.target === e.currentTarget && onClose() : undefined}>
+      <div ref={box} tabIndex={-1} className={drawer ? 'drawer outline-none' : `dialog my-auto outline-none ${wide ? 'max-w-3xl' : 'max-w-md'}`}>
+        {head}
+        <div className={drawer ? 'min-h-0 flex-1 overflow-y-auto p-5' : 'p-5'}>{children}</div>
+      </div>
+    </div>, document.body);
 }
 
 const ToastCtx = createContext<(msg: string, ok?: boolean) => void>(() => {});
@@ -39,13 +54,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[60] flex max-w-sm flex-col gap-2" aria-live="polite">
-        {list.map((t) => (
-          <div key={t.id} className={`flex items-start gap-2 rounded-md px-4 py-3 text-sm text-white shadow-lg ${t.ok ? 'bg-green-700' : 'bg-red-700'}`}>
-            {t.ok ? <CheckCircle2 size={18} className="mt-0.5 shrink-0" /> : <XCircle size={18} className="mt-0.5 shrink-0" />}<span>{t.msg}</span>
-          </div>
-        ))}
-      </div>
+      {createPortal(
+        <div className="pointer-events-none fixed inset-x-3 bottom-3 z-[60] flex flex-col items-end gap-2 sm:left-auto sm:max-w-sm" aria-live="polite">
+          {list.map((t) => (
+            <div key={t.id} className="toast pointer-events-auto">
+              {t.ok ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#6ECDA6]" /> : <XCircle size={18} className="mt-0.5 shrink-0 text-[#E88A8A]" />}<span>{t.msg}</span>
+            </div>
+          ))}
+        </div>, document.body)}
     </ToastCtx.Provider>
   );
 }
@@ -76,27 +92,31 @@ export function Pager({ page, total, size, onPage }: { page: number; total: numb
   const pages = Math.max(1, Math.ceil(total / size));
   if (total <= size) return null;
   return (
-    <div className="flex items-center justify-between gap-2 pt-3 text-sm text-slate-600">
-      <span>Halaman {page} dari {pages}</span>
+    <nav className="flex flex-wrap items-center justify-between gap-2 pt-3 text-sm text-muted" aria-label="Halaman">
+      <span>Halaman <b className="text-ink">{page}</b> dari {pages}</span>
       <div className="flex gap-2">
         <button className="btn-o" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={16} /> Sebelumnya</button>
         <button className="btn-o" disabled={page >= pages} onClick={() => onPage(page + 1)}>Berikutnya <ChevronRight size={16} /></button>
       </div>
-    </div>
+    </nav>
   );
 }
 
 export const Skeleton = ({ rows = 5 }: { rows?: number }) => (
-  <div className="animate-pulse space-y-2 p-2">{Array.from({ length: rows }).map((_, i) => <div key={i} className="h-9 rounded bg-slate-200" />)}</div>
+  <div className="space-y-2.5 p-3" role="status" aria-label="Memuat">{Array.from({ length: rows }).map((_, i) => <div key={i} className="skel h-10" />)}</div>
 );
-export const Empty = ({ text }: { text: string }) => <div className="py-12 text-center text-sm text-slate-500">{text}</div>;
+export const Spinner = () => <span className="spinner" aria-hidden="true" />;
+export const Loading = () => <div className="grid min-h-screen place-items-center text-muted"><span className="flex items-center gap-3 text-sm"><Spinner /> Memuat…</span></div>;
+export const Empty = ({ text }: { text: string }) => (
+  <div className="flex flex-col items-center gap-3 px-4 py-12 text-center text-sm text-muted"><span className="grid h-11 w-11 place-items-center rounded-full border border-line text-gold"><Inbox size={19} /></span><p className="max-w-sm">{text}</p></div>
+);
 export const ErrorBox = ({ text, retry }: { text: string; retry?: () => void }) => (
-  <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{text} {retry && <button className="ml-2 font-semibold underline" onClick={retry}>Coba lagi</button>}</div>
+  <div className="note-bad flex items-start gap-2" role="alert"><TriangleAlert size={17} className="mt-0.5 shrink-0 text-bad" /><span>{text} {retry && <button className="ml-2 font-semibold underline" onClick={retry}>Coba lagi</button>}</span></div>
 );
 export function Confirm({ title, text, onYes, onNo, danger }: { title: string; text: string; onYes: () => void; onNo: () => void; danger?: boolean }) {
   return (
     <Modal title={title} onClose={onNo}>
-      <p className="text-sm text-slate-700">{text}</p>
+      <p className="text-sm leading-relaxed">{text}</p>
       <div className="mt-5 flex justify-end gap-2"><button className="btn-o" onClick={onNo}>Batal</button><button className={danger ? 'btn-d' : 'btn-p'} onClick={onYes}>Ya, lanjutkan</button></div>
     </Modal>
   );
@@ -130,8 +150,8 @@ export interface Exp { status: string; tgl?: string; hari?: number }
 export function ExpBadge({ e, full = false }: { e?: Exp; full?: boolean }) {
   if (!e || !e.tgl || e.hari == null) return null;
   const h = e.hari;
-  if (e.status === 'kedaluwarsa') return <span className="mt-1 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">Sudah kedaluwarsa{full ? ` sejak ${tglIndo(e.tgl)}` : ''} ({-h} hari lalu)</span>;
-  if (e.status === 'segera') return <span className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{h === 0 ? 'Berakhir hari ini' : h <= 60 ? `Segera berakhir: ${h} hari lagi` : `Berakhir ± ${Math.round(h / 30)} bulan lagi`}{full ? ` (${tglIndo(e.tgl)})` : ''}</span>;
+  if (e.status === 'kedaluwarsa') return <span className="chip mt-1 !whitespace-normal text-bad">Sudah kedaluwarsa{full ? ` sejak ${tglIndo(e.tgl)}` : ''} ({-h} hari lalu)</span>;
+  if (e.status === 'segera') return <span className="chip mt-1 !whitespace-normal text-warn">{h === 0 ? 'Berakhir hari ini' : h <= 60 ? `Segera berakhir: ${h} hari lagi` : `Berakhir ± ${Math.round(h / 30)} bulan lagi`}{full ? ` (${tglIndo(e.tgl)})` : ''}</span>;
   return null;
 }
 
@@ -145,7 +165,7 @@ export function BerlakuInput({ id, label, value, onChange, forever = false, span
       <label className="lbl" htmlFor={id}>{label}</label>
       {legacy ? (
         <div><input id={id} className="inp" value={value} onChange={(e) => onChange(e.target.value)} />
-          <p className="mt-1 text-xs text-amber-700">Format lama. <button type="button" className="font-semibold underline" onClick={() => onChange('')}>Ganti dengan tanggal</button> agar pengingat kedaluwarsa akurat.</p></div>
+          <p className="mt-1 text-xs text-warn">Format lama. <button type="button" className="font-semibold underline" onClick={() => onChange('')}>Ganti dengan tanggal</button> agar pengingat kedaluwarsa akurat.</p></div>
       ) : (
         <>
           <input id={id} type="date" className="inp" value={ISO.test(value) ? value : ''} disabled={isForever} onChange={(e) => onChange(e.target.value)} />
@@ -165,7 +185,7 @@ export function MemberInputs({ f, set }: { f: any; set: (k: string, v: any) => v
         <div key={k}><label className="lbl" htmlFor={k}>{l}</label>
           <input id={k} type="number" min={0} max={9999999} step={1} inputMode="numeric" className="inp" placeholder="0" value={f[k] ?? ''} onChange={(e) => set(k, e.target.value.replace(/\D/g, ''))} /></div>
       ))}
-      <p className="text-xs text-slate-500 md:col-span-2">Isi angka saja (tanpa nama anggota). Rincian perempuan, lansia, dan disabilitas boleh saling beririsan, jadi tidak harus berjumlah sama dengan total, tetapi tiap rincian tidak boleh lebih besar dari total.</p>
+      <p className="text-xs text-muted md:col-span-2">Isi angka saja (tanpa nama anggota). Rincian perempuan, lansia, dan disabilitas boleh saling beririsan, jadi tidak harus berjumlah sama dengan total, tetapi tiap rincian tidak boleh lebih besar dari total.</p>
     </>
   );
 }
@@ -174,9 +194,9 @@ export function MemberInputs({ f, set }: { f: any; set: (k: string, v: any) => v
 export function LinkInputs({ f, set }: { f: any; set: (k: string, v: any) => void }) {
   return (
     <>
-      <div className="md:col-span-2"><label className="lbl" htmlFor="link_dokumentasi">Link dokumentasi kegiatan (opsional) <span className="font-normal text-slate-500">mis. folder Google Drive</span></label>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_dokumentasi">Link dokumentasi kegiatan (opsional) <span className="font-normal text-muted">mis. folder Google Drive</span></label>
         <input id="link_dokumentasi" type="url" className="inp" maxLength={500} placeholder="https://drive.google.com/..." value={f.link_dokumentasi ?? ''} onChange={(e) => set('link_dokumentasi', e.target.value)} /></div>
-      <div className="md:col-span-2"><label className="lbl" htmlFor="link_instagram"><InstagramIcon size={14} className="mr-1 inline text-pink-600" />Instagram ormas (opsional) <span className="font-normal text-slate-500">tautan atau @username</span></label>
+      <div className="md:col-span-2"><label className="lbl" htmlFor="link_instagram"><InstagramIcon size={14} className="mr-1 inline text-bad" />Instagram ormas (opsional) <span className="font-normal text-muted">tautan atau @username</span></label>
         <input id="link_instagram" className="inp" maxLength={200} placeholder="@namaormas atau https://instagram.com/namaormas" value={f.link_instagram ?? ''} onChange={(e) => set('link_instagram', e.target.value)} /></div>
       <div className="md:col-span-2"><label className="lbl" htmlFor="link_youtube">Link YouTube ormas (opsional)</label>
         <input id="link_youtube" type="url" className="inp" maxLength={200} placeholder="https://youtube.com/@namaormas" value={f.link_youtube ?? ''} onChange={(e) => set('link_youtube', e.target.value)} /></div>
@@ -190,7 +210,7 @@ export function LinkInputs({ f, set }: { f: any; set: (k: string, v: any) => voi
 export const CP_PARTS: [string, string][] = [['deskripsi', 'Deskripsi singkat ormas'], ['visi', 'Visi'], ['misi', 'Misi'], ['legal', 'Legal Standing'], ['bidang', 'Cakupan kegiatan / bidang'], ['dana', 'Sumber dana'], ['anggota', 'Profil anggota (kelompok perempuan, lansia, dan disabilitas)'], ['pengurus', 'Susunan pengurus'], ['program', 'Program kegiatan']];
 export function CompanyProfileGuide({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 md:col-span-2">
+    <div className="note-info md:col-span-2">
       <p className="font-semibold">Panduan pengisian Company Profile</p>
       <p className="mt-0.5 text-xs">Company Profile (PDF / PPT / PPTX) wajib memuat bagian berikut:</p>
       <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-xs">{CP_PARTS.map(([k, l]) => <li key={k}>{l}</li>)}</ol>
@@ -202,10 +222,10 @@ export function CpChecklist({ value, onChange }: { value: string; onChange: (v: 
   const sel = new Set(String(value || '').split(',').filter(Boolean));
   const toggle = (k: string) => { const n = new Set(sel); if (n.has(k)) n.delete(k); else n.add(k); onChange(CP_PARTS.map(([x]) => x).filter((x) => n.has(x)).join(',')); };
   return (
-    <fieldset className="rounded-md border border-slate-200 p-3 md:col-span-2">
-      <legend className="px-1 text-sm font-semibold">Bagian yang sudah ada di Company Profile Anda <span className="ml-1 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">Opsional</span></legend>
+    <fieldset className="panel md:col-span-2">
+      <legend className="px-1 text-sm font-semibold">Bagian yang sudah ada di Company Profile Anda <span className="chip ml-1 !text-[10px] uppercase text-muted">Opsional</span></legend>
       <div className="grid gap-1 sm:grid-cols-2">{CP_PARTS.map(([k, l]) => <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sel.has(k)} onChange={() => toggle(k)} />{l}</label>)}</div>
-      <p className="mt-1 text-xs text-slate-500">Centang bagian yang sudah dimuat di berkas Company Profile. Centang ini menentukan status kelengkapan.</p>
+      <p className="mt-1 text-xs text-muted">Centang bagian yang sudah dimuat di berkas Company Profile. Centang ini menentukan status kelengkapan.</p>
     </fieldset>
   );
 }
@@ -218,8 +238,8 @@ export function CpStatus({ cpBagian, hasFile }: { cpBagian: string; hasFile: boo
   const s = cpStatus(cpBagian, hasFile);
   return (
     <div className="text-xs">
-      <span className={`rounded px-2 py-0.5 font-bold ${s.lengkap ? 'bg-green-100 text-green-800' : s.hasFile ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>{!s.hasFile ? 'Belum diunggah' : s.lengkap ? `Lengkap (${s.done}/${s.total} bagian)` : `Belum lengkap (${s.done}/${s.total} bagian)`}</span>
-      {s.hasFile && s.missing.length > 0 && <p className="mt-1 text-amber-800">Belum diisi: {s.missing.join(', ')}</p>}
+      <span className={`chip chip-dot ${s.lengkap ? 'text-ok' : s.hasFile ? 'text-warn' : 'text-bad'}`}>{!s.hasFile ? 'Belum diunggah' : s.lengkap ? `Lengkap (${s.done}/${s.total} bagian)` : `Belum lengkap (${s.done}/${s.total} bagian)`}</span>
+      {s.hasFile && s.missing.length > 0 && <p className="mt-1 text-warn">Belum diisi: {s.missing.join(', ')}</p>}
     </div>
   );
 }
