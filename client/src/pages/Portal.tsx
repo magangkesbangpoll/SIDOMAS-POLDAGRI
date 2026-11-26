@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Building2, ExternalLink, KeyRound, LogOut, Save, Upload } from 'lucide-react';
+import { Building2, ExternalLink, KeyRound, LayoutDashboard, LogOut, Save } from 'lucide-react';
 import { api } from '../api';
-import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, ADART, COMPANY_PROFILE, CompanyProfileGuide, CpChecklist, CpStatus, DOKUMENTASI, docAccept, docTypeOk, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
+import { ANGGOTA_KEYS, BerlakuInput, Badge, DOC_TYPES, ADART, COMPANY_PROFILE, CompanyProfileGuide, CpChecklist, CpStatus, docAccept, docTypeOk, ErrorBox, KEMANTREN, LinkInputs, MemberInputs, Modal, fmtDate, fmtSize, useFetch, useToast } from '../ui';
 import { ChangePassword, PasswordInput, Shell } from './AdminAuth';
 
 export function PortalLogin() {
@@ -50,8 +50,9 @@ export function PortalReset() {
   );
 }
 
-const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
+const KEYS = ['bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'telepon_ormas', 'email_ormas', 'alamat', 'legal_status', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...ANGGOTA_KEYS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 
+// Halaman "Kelola Data" Ormas (formulir). Dashboard utama setelah login ada di PortalDashboard.tsx; halaman ini dibuka dari quick access (#bagian).
 export function PortalHome() {
   const nav = useNavigate(); const toast = useToast();
   const [me, setMe] = useState<any>(null); const [err, setErr] = useState('');
@@ -61,26 +62,23 @@ export function PortalHome() {
   const [f, setF] = useState<any>({}); const [logo, setLogo] = useState<File | null>(null); const [rmLogo, setRmLogo] = useState(false);
   const [files, setFiles] = useState<Record<string, File>>({}); const [busy, setBusy] = useState(false); const [view, setView] = useState<any>(null); const [pw, setPw] = useState(false);
   useEffect(() => { if (me) setF(Object.fromEntries(KEYS.map((k) => [k, me[k] ?? '']))); }, [me]);
+  // Quick access dari dashboard membuka bagian tertentu lewat #anchor
+  useEffect(() => { if (me && window.location.hash) setTimeout(() => document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150); }, [me]);
   if (err) return <div className="p-6"><ErrorBox text={err} retry={load} /></div>;
   if (!me) return <div className="grid min-h-screen place-items-center text-slate-500">Memuat…</div>;
   if (me.must_change) return <ChangePassword path="/portal/change-password" onDone={load} />;
   const maxMb = meta?.max_pdf_mb || 20;
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
   const T = (k: string, label: string, o: any = {}) => <div className={o.span ? 'md:col-span-2' : ''}><label className="lbl" htmlFor={k}>{label}</label><input id={k} type={o.type || 'text'} className="inp" placeholder={o.ph} maxLength={o.max} value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} /></div>;
-  const H = (t: string) => <h3 className="border-b border-slate-200 pb-1 pt-2 font-serif font-bold text-navy-900 md:col-span-2">{t}</h3>;
+  const H = (t: string, id?: string) => <h3 id={id} className="scroll-mt-4 border-b border-slate-200 pb-1 pt-2 font-serif font-bold text-navy-900 md:col-span-2">{t}</h3>;
   const pick = (j: string, x?: File) => {
     if (!x) return; if (!docTypeOk(j, x)) return toast(`"${x.name}" format tidak didukung${j === 'company_profile' ? ' (PDF, PPT, atau PPTX)' : ' (harus PDF)'}`, false); if (x.size > maxMb * 1048576) return toast(`"${x.name}" melebihi ${maxMb} MB`, false);
     setFiles((p) => ({ ...p, [j]: x }));
   };
-  const uploadLaporan = async () => {
-    if (busy || !files.dokumentasi) return; setBusy(true);
-    const fd = new FormData(); KEYS.forEach((k) => fd.append(k, String(f[k] ?? ''))); fd.append('dokumentasi', files.dokumentasi);
-    try { await api('/portal/profile', { method: 'PUT', form: fd }); toast('Laporan kegiatan tahunan terkirim dan menunggu verifikasi admin.'); setFiles((p) => { const n = { ...p }; delete n.dokumentasi; return n; }); await load(); }
-    catch (x: any) { toast(x.message, false); } finally { setBusy(false); }
-  };
   const logout = async () => { await api('/portal/logout', { method: 'POST', body: {} }).catch(() => {}); nav('/ormas-login'); };
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); if (busy) return;
+    if (!f.legal_status) return toast('Pilih YA atau TIDAK pada pertanyaan Legal Standing', false);
     const tot = f.anggota_total === '' ? null : +f.anggota_total; const rinci = ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'];
     if (tot == null && rinci.some((k) => f[k] !== '')) return toast('Isi juga jumlah total anggota', false);
     if (tot != null && rinci.some((k) => f[k] !== '' && +f[k] > tot)) return toast('Rincian anggota tidak boleh lebih besar dari jumlah total', false);
@@ -94,7 +92,7 @@ export function PortalHome() {
   };
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b-4 border-gold-500 bg-navy-900 text-white"><div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-3"><Link to="/" className="font-serif text-lg font-bold">SIDOMAS · Portal Ormas</Link><div className="flex gap-2"><button className="btn bg-navy-700 text-white hover:bg-navy-600" onClick={() => setPw(true)}><KeyRound size={15} /> Ganti password</button><button className="btn-g" onClick={logout}><LogOut size={15} /> Keluar</button></div></div></header>
+      <header className="border-b-4 border-gold-500 bg-navy-900 text-white"><div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-3"><Link to="/" className="font-serif text-lg font-bold">SIDOMAS · Portal Ormas</Link><div className="flex flex-wrap gap-2"><Link to="/portal" className="btn bg-navy-700 text-white hover:bg-navy-600"><LayoutDashboard size={15} /> Dashboard</Link><button className="btn bg-navy-700 text-white hover:bg-navy-600" onClick={() => setPw(true)}><KeyRound size={15} /> Ganti password</button><button className="btn-g" onClick={logout}><LogOut size={15} /> Keluar</button></div></div></header>
       <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
         <div className="card flex flex-wrap items-center gap-4 p-4">
           {me.has_logo ? <img src={`/api/logo/${me.kode_ormas}?${me.logo_pending ? 'pending=1&' : ''}v=${encodeURIComponent(me.updated_at)}`} alt="" className="h-16 w-16 rounded object-cover" /> : <span className="grid h-16 w-16 place-items-center rounded bg-navy-50 text-navy-700"><Building2 /></span>}
@@ -103,34 +101,32 @@ export function PortalHome() {
         {me.pending && <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><b>Perubahan Anda menunggu verifikasi admin.</b> Katalog publik dan penyimpanan dokumen masih memakai data lama sampai admin memverifikasinya. Anda masih bisa menyunting dan menyimpan ulang perubahan ini.</p>}
         {!me.pending && me.catatan_penolakan && <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>Perubahan terakhir Anda ditolak admin.</b> {me.catatan_penolakan}</p>}
         <p className="rounded bg-amber-50 p-3 text-sm text-slate-700">Anda hanya dapat mengubah data ormas Anda sendiri. Setiap kali Anda menyimpan perubahan, status dokumen otomatis menjadi <b>Perlu Diverifikasi</b>, dan data baru tampil di katalog setelah admin memverifikasinya. Nama ormas, kategori, dan status hanya dapat diubah admin.</p>
+        <p className="rounded border border-navy-100 bg-navy-50 p-3 text-sm text-slate-700">Laporan Kegiatan Tahunan sekarang diisi lewat halaman khusus. <Link to="/portal/laporan" className="font-semibold text-navy-700 underline">Buka Laporan Kegiatan Tahunan</Link></p>
         <form onSubmit={save} className="card grid gap-4 p-4 md:grid-cols-2">
-          {H('Unggah Laporan Kegiatan Tahunan')}
-          {(() => { const j = 'dokumentasi'; const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
-            <div className={`rounded-md border p-3 md:col-span-2 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
-              <label className="lbl" htmlFor="f_dok">Laporan kegiatan tahunan (PDF, maks. {maxMb} MB)</label>
-              <div className="flex flex-wrap items-center gap-2">
-                <input id="f_dok" type="file" accept="application/pdf" className="min-w-0 flex-1 text-xs" onChange={(e) => { pick(j, e.target.files?.[0]); e.target.value = ''; }} />
-                <button type="button" className="btn-p" disabled={busy || !files[j]} onClick={uploadLaporan}><Upload size={16} /> {busy ? 'Mengunggah…' : 'Upload'}</button>
-              </div>
-              <p className="mt-1 text-xs text-slate-600">{files[j] ? <>Siap diunggah: <b>{files[j].name}</b> ({fmtSize(files[j].size)}). Klik <b>Upload</b>.</> : cur ? <>Tersimpan: {cur.nama_file} ({fmtSize(cur.ukuran_file)}). Mengunggah lagi akan menggantikan laporan ini.</> : 'Belum ada laporan. Berkas masuk ke folder Google Drive ormas Anda setelah diverifikasi admin.'}</p>
-            </div>); })()}
-          {H('Identitas')}
+          {H('Identitas', 'identitas')}
           {T('bentuk', 'Bentuk', { ph: 'Mis. Perkumpulan, Yayasan' })}
           <div><label className="lbl" htmlFor="km">Kemantren</label><select id="km" className="inp" value={f.kemantren ?? ''} onChange={(e) => set('kemantren', e.target.value)}><option value="">Pilih kemantren</option>{KEMANTREN.map((k) => <option key={k}>{k}</option>)}</select></div>
           {T('bidang_kegiatan', 'Bidang kegiatan', { span: true, max: 300 })}
           <div className="md:col-span-2"><label className="lbl" htmlFor="lg">Logo ormas</label><input id="lg" type="file" accept="image/png,image/jpeg,image/webp" className="text-sm" onChange={(e) => setLogo(e.target.files?.[0] || null)} />{me.has_logo && !logo && <label className="mt-1 flex items-center gap-2 text-xs"><input type="checkbox" checked={rmLogo} onChange={(e) => setRmLogo(e.target.checked)} />Hapus logo saat ini</label>}</div>
-          {H('Nama Pengurus')}
-          {T('nama_ketua', 'Ketua')}{T('sekretaris', 'Sekretaris')}{T('bendahara', 'Bendahara')}{T('nomor_whatsapp_ketua', 'Nomor telepon / WhatsApp ketua', { type: 'tel', ph: '081234567890' })}
-          {H('Kontak dan Alamat')}
+          {H('Nama Pengurus', 'pengurus')}
+          {T('nama_ketua', 'Ketua')}{T('sekretaris', 'Sekretaris')}{T('bendahara', 'Bendahara')}
+          {H('Kontak dan Alamat', 'kontak')}
+          {T('nomor_whatsapp_ketua', 'Nomor Telepon Ketua (nomor pribadi; di katalog publik ditampilkan samar)', { type: 'tel', ph: '081234567890' })}
+          {T('telepon_ormas', 'Nomor Telepon Ormas (nomor kontak resmi organisasi)', { type: 'tel', ph: '0274123456' })}
           {T('email_ormas', 'Email ormas (dipakai untuk pemulihan password)', { type: 'email', span: true })}
           <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat <span className="font-normal text-slate-500">(tulis selengkap mungkin, dipakai untuk peta di halaman publik)</span></label><textarea id="al" rows={2} maxLength={500} className="inp" value={f.alamat ?? ''} onChange={(e) => set('alamat', e.target.value)} /></div>
-          {H('Jumlah Anggota')}
+          {H('Jumlah Anggota', 'anggota')}
           <MemberInputs f={f} set={set} />
-          {H('Legal Standing')}
-          {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d" forever value={f.legal_berlaku_sd ?? ''} onChange={(v) => set('legal_berlaku_sd', v)} />
-          {H('SKTO')}
+          {H('Legal Standing', 'legal')}
+          <div className="md:col-span-2">
+            <p className="lbl">Apakah sudah memiliki Legal Standing?</p>
+            <div className="flex gap-6">{[['ya', 'YA'], ['tidak', 'TIDAK']].map(([v, l]) => <label key={v} className="flex items-center gap-2 text-sm"><input type="radio" name="legal_status" value={v} checked={f.legal_status === v} onChange={() => set('legal_status', v)} />{l}</label>)}</div>
+          </div>
+          {f.legal_status === 'ya' && <>{T('legal_jenis', 'Jenis Legal Standing')}{T('nomor_sk', 'Nomor Legal Standing')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku sampai" forever value={f.legal_berlaku_sd ?? ''} onChange={(v) => set('legal_berlaku_sd', v)} /></>}
+          {f.legal_status === 'tidak' && <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900 md:col-span-2">Anda Tidak Bisa Mengisi Karena Tidak Memiliki Legal Standing.</p>}
+          {H('SKTO', 'skto')}
           {T('skto_nomor', 'Nomor')}{T('skto_tahun', 'Tahun', { max: 4, ph: '2024' })}<BerlakuInput id="skto_berlaku_sd" label="Berlaku s/d" value={f.skto_berlaku_sd ?? ''} onChange={(v) => set('skto_berlaku_sd', v)} />
-          {H(`Dokumen PDF (maks. ${maxMb} MB per file)`)}
+          {H(`Dokumen PDF (maks. ${maxMb} MB per file)`, 'dokumen')}
           <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
             {DOC_TYPES.map(([j, l]) => { const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
               <div key={j} className={`rounded-md border p-3 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
@@ -140,7 +136,7 @@ export function PortalHome() {
                 {cur && <button type="button" className="mt-1 text-xs font-semibold text-navy-700 underline" onClick={() => setView(view?.id === cur.id ? null : cur)}><ExternalLink size={12} className="mr-1 inline" />{view?.id === cur.id ? 'Tutup PDF' : 'Lihat PDF tersimpan'}</button>}
               </div>); })}
           </div>
-          {H('Dokumen Tambahan (opsional)')}
+          {H('Dokumen Tambahan (opsional)', 'tambahan')}
         <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
           {[ADART, COMPANY_PROFILE].map(([j, l]) => { const cur = me.docs.find((d: any) => d.jenis_dokumen === j); return (
             <div key={j} className={`rounded-md border p-3 ${files[j] || cur ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}>
