@@ -6,7 +6,7 @@ import { ADART, BerlakuInput, COMPANY_PROFILE, CompanyProfileGuide, CpChecklist,
 
 const BENTUK = ['YAYASAN', 'PERKUMPULAN', 'LEMBAGA', 'PAGUYUBAN', 'LAINNYA'];
 const MEM: [string, string][] = [['anggota_total', 'Total anggota'], ['anggota_perempuan', 'Anggota perempuan'], ['anggota_lansia', 'Anggota lansia'], ['anggota_disabilitas', 'Anggota disabilitas']];
-const KEYS = ['bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'email_ormas', 'alamat', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', ...MEM.map(([k]) => k), 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
+const KEYS = ['bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'telepon_ormas', 'email_ormas', 'alamat', 'legal_status', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', ...MEM.map(([k]) => k), 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 const Tag = ({ wajib }: { wajib: boolean }) => <span className={`ml-2 rounded px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase ${wajib ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600'}`}>{wajib ? 'Wajib diisi' : 'Opsional'}</span>;
 
 // Pendaftaran ormas baru (publik). Setiap kolom diberi label "Wajib diisi" atau "Opsional".
@@ -55,12 +55,15 @@ export function Daftar() {
     const bentuk = bp === 'LAINNYA' ? bl.trim() : bp;
     if (!bentuk) return toast('Bentuk ormas wajib diisi', false);
     if (!logo) return toast('Logo ormas wajib diunggah', false);
+    if (!f.legal_status) return toast('Pilih YA atau TIDAK pada pertanyaan Legal Standing', false);
     if (!files.adart) return toast('Dokumen AD/ART wajib diunggah', false);
     if (!files.company_profile) return toast('Company Profile wajib diunggah', false);
     const tot = +f.anggota_total; if (['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas'].some((k) => +f[k] > tot)) return toast('Jumlah perempuan, lansia, dan disabilitas tidak boleh lebih besar dari total anggota', false);
     setBusy(true);
     const fd = new FormData(); fd.append('nama_ormas', String(f.nama_ormas ?? '').trim()); fd.append('kategori_nama', kat); fd.append('bentuk', bentuk);
-    KEYS.forEach((k) => fd.append(k, String(f[k] ?? ''))); Object.entries(files).forEach(([j, x]) => fd.append(j, x)); fd.append('logo', logo);
+    // Jika belum memiliki Legal Standing, isian dokumen Legal Standing tidak dikirim (status "tidak" tetap dikirim)
+    const LEGAL = ['legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd'];
+    KEYS.forEach((k) => fd.append(k, f.legal_status === 'tidak' && LEGAL.includes(k) ? '' : String(f[k] ?? ''))); Object.entries(files).forEach(([j, x]) => fd.append(j, x)); fd.append('logo', logo);
     try { await api('/public/daftar', { method: 'POST', form: fd }); setDone(true); window.scrollTo(0, 0); } catch (x: any) { toast(x.message, false); } finally { setBusy(false); }
   };
   if (done) return (
@@ -95,8 +98,9 @@ export function Daftar() {
         {T('nama_ketua', 'Ketua', { req: true })}{T('sekretaris', 'Sekretaris', { req: true })}{T('bendahara', 'Bendahara', { req: true })}
 
         {H('Kontak dan Alamat', true)}
-        {T('nomor_whatsapp_ketua', 'Nomor WhatsApp ketua (untuk konfirmasi dari kami)', { type: 'tel', ph: '081234567890', req: true })}
-        {T('email_ormas', 'Email ormas', { type: 'email', req: true })}
+        {T('nomor_whatsapp_ketua', 'Nomor Telepon Ketua (nomor pribadi; untuk konfirmasi dari kami, ditampilkan samar di katalog)', { type: 'tel', ph: '081234567890', req: true })}
+        {T('telepon_ormas', 'Nomor Telepon Ormas (nomor kontak resmi organisasi)', { type: 'tel', ph: '0274123456', req: true })}
+        {T('email_ormas', 'Email ormas', { type: 'email', req: true, span: true })}
         <div className="md:col-span-2"><label className="lbl" htmlFor="al">Alamat kantor / sekretariat<Tag wajib /></label><textarea id="al" rows={2} maxLength={500} required className="inp" value={f.alamat} onChange={(e) => set('alamat', e.target.value)} /></div>
 
         {H('Jumlah Anggota', true)}
@@ -108,8 +112,13 @@ export function Daftar() {
         <CompanyProfileGuide />
         <CpChecklist value={f.cp_bagian} onChange={(v) => set('cp_bagian', v)} />
 
-        {H('Legal Standing', false)}
-        {T('legal_jenis', 'Jenis')}{T('nomor_sk', 'Nomor')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku s/d (Opsional)" forever value={f.legal_berlaku_sd ?? ''} onChange={(v: string) => set('legal_berlaku_sd', v)} />
+        {H('Legal Standing', true)}
+        <div className="md:col-span-2">
+          <p className="lbl">Apakah sudah memiliki Legal Standing?<Tag wajib /></p>
+          <div className="flex gap-6">{[['ya', 'YA'], ['tidak', 'TIDAK']].map(([v, l]) => <label key={v} className="flex items-center gap-2 text-sm"><input type="radio" name="legal_status" value={v} required checked={f.legal_status === v} onChange={() => set('legal_status', v)} />{l}</label>)}</div>
+        </div>
+        {f.legal_status === 'ya' && <>{T('legal_jenis', 'Jenis Legal Standing')}{T('nomor_sk', 'Nomor Legal Standing')}{T('legal_tahun', 'Tahun', { max: 4, ph: '2021' })}<BerlakuInput id="legal_berlaku_sd" label="Berlaku sampai" forever value={f.legal_berlaku_sd ?? ''} onChange={(v: string) => set('legal_berlaku_sd', v)} /></>}
+        {f.legal_status === 'tidak' && <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900 md:col-span-2">Anda Tidak Bisa Mengisi Karena Tidak Memiliki Legal Standing.</p>}
         {H(`Dokumen PDF (maks. ${maxMb} MB per file)`, false)}
         <div className="grid gap-3 md:col-span-2 md:grid-cols-2">{DOC_TYPES.filter(([j]: string[]) => j !== 'skto').map(([j, l]: string[]) => FileBox(j, l))}{FileBox(DOKUMENTASI[0], 'Laporan kegiatan tahunan (PDF)')}</div>
         {H('Tautan Dokumentasi dan Media Sosial', false)}
