@@ -51,11 +51,40 @@ export function notifOrmas(ormasId, { kategori = 'Information', jenis = 'info', 
   } catch (e) { console.error('Gagal membuat notifikasi ormas:', e.message); return false; }
 }
 
+// ---------- Batch 8: pengingat laporan tahunan (1-31 Desember) ----------
+export const LAP_LINK = '/portal/laporan';
+const LAP_STATUS_LABEL = { belum: 'Belum dibuat', draft: 'Draf', revisi: 'Dikembalikan untuk revisi', dikirim: 'Menunggu Verifikasi', selesai: 'Selesai' };
+export const labelLaporan = (s) => LAP_STATUS_LABEL[s] || 'Belum dibuat';
+export const butuhLaporan = (row) => !['dikirim', 'selesai'].includes(row?.status || 'belum');
+
+export function kelengkapanLaporan(row) {
+  const status = row?.status || 'belum';
+  const adaPdf = !!row?.dokumentasi_key;
+  const terkirim = status === 'dikirim' || status === 'selesai';
+  const lengkap = (adaPdf ? 1 : 0) + (terkirim ? 1 : 0);
+  return { status, label: labelLaporan(status), ada_pdf: adaPdf, terkirim, lengkap, total: 2, persen: Math.round((lengkap / 2) * 100) };
+}
+
+export function pesanPengingatLaporan(tahun, row) {
+  const k = kelengkapanLaporan(row);
+  return 'Pengingat Laporan Kegiatan Tahunan. Segera lengkapi dan kirim Laporan Kegiatan Tahunan untuk tahun berjalan sebelum pergantian tahun.\n\n'
+    + `Tahun laporan: ${tahun}\n`
+    + `Status laporan: ${k.label}\n`
+    + `Kelengkapan: ${k.persen}% (${k.lengkap}/${k.total} indikator: PDF ${k.ada_pdf ? 'sudah' : 'belum'} diunggah, ${k.terkirim ? 'sudah' : 'belum'} dikirim)\n`
+    + `Halaman laporan: ${LAP_LINK}\n`
+    + `Peringatan: laporan tahun ${tahun} belum selesai. Segera unggah PDF dan kirim sebelum pergantian tahun.`;
+}
+
+export function pengingatLaporanAktif(ormas, tahun, row) {
+  if (+todayJkt().slice(5, 7) !== 12 || !butuhLaporan(row)) return null;
+  const k = kelengkapanLaporan(row);
+  return { aktif: true, tahun, status: k.status, status_label: k.label, kelengkapan: k.persen, lengkap: k.lengkap, total: k.total, pesan: pesanPengingatLaporan(tahun, row), link: LAP_LINK };
+}
+
 // Pengingat otomatis untuk ormas: dokumen hampir/sudah kedaluwarsa, konfirmasi Legal Standing, Laporan Kegiatan Tahunan.
 export function cekPengingatOrmas() {
   try {
     const th = tahunIni(), bln = +todayJkt().slice(5, 7);
-    const sudah = new Set(db.prepare(`select ormas_id,tahun from laporan_tahunan where status='dikirim'`).all().map((x) => `${x.ormas_id}:${x.tahun}`));
     db.transaction(() => {
       for (const o of db.prepare('select * from ormas').all()) {
         const e = expiryInfo(o);
@@ -71,11 +100,15 @@ export function cekPengingatOrmas() {
         const ls = o.legal_status || '';
         if (ls === '') notifOrmas(o.id, { kategori: 'Required Action', jenis: 'legal', kunci: 'legal:konfirmasi', judul: 'Konfirmasi status Legal Standing', pesan: 'Mohon jawab pertanyaan "Apakah sudah memiliki Legal Standing?" pada menu Data Ormas.' });
         else if (ls === 'tidak') notifOrmas(o.id, { kategori: 'Information', jenis: 'legal', kunci: 'legal:tidak', judul: 'Informasi Legal Standing', pesan: 'Ormas Anda tercatat belum memiliki Legal Standing, jadi Anda tidak perlu mengisi data dokumennya. Jika nanti sudah memilikinya, ubah statusnya di menu Data Ormas.' });
-        const mulai = +String(o.created_at).slice(0, 4) || th;
-        if (th - 1 >= mulai && !sudah.has(`${o.id}:${th - 1}`)) notifOrmas(o.id, { kategori: 'Required Action', jenis: 'laporan', kunci: `lap:${th - 1}:belum`, judul: `Laporan Kegiatan Tahunan ${th - 1} belum dikirim`, pesan: `Ormas wajib mengirim Laporan Kegiatan Tahunan ${th - 1}. Buka menu Laporan Tahunan untuk menyusunnya.` });
-        if (!sudah.has(`${o.id}:${th}`)) {
-          if (bln >= 12) notifOrmas(o.id, { kategori: 'Required Action', jenis: 'laporan', kunci: `lap:${th}:des`, judul: `Laporan Kegiatan Tahunan ${th} belum dikirim`, pesan: `Tahun ${th} hampir berakhir. Segera kirim Laporan Kegiatan Tahunan ${th} lewat menu Laporan Tahunan.` });
-          else if (bln >= 9) notifOrmas(o.id, { kategori: 'Warning', jenis: 'laporan', kunci: `lap:${th}:sep`, judul: `Pengingat Laporan Kegiatan Tahunan ${th}`, pesan: `Laporan Kegiatan Tahunan ${th} belum dikirim. Mulai susun dan kirim lewat menu Laporan Tahunan.` });
+        // Batch 8: pengingat laporan HANYA berlaku 1-31 Desember, untuk tahun berjalan yang belum selesai.
+        if (bln === 12) {
+          const lap = db.prepare('select status,dokumentasi_key from laporan_tahunan where ormas_id=? and tahun=?').get(o.id, th);
+          if (butuhLaporan(lap)) notifOrmas(o.id, {
+            kategori: 'Required Action', jenis: 'laporan',
+            kunci: `lap:${th}:des:${lap?.status || 'belum'}`,
+            judul: `Pengingat Laporan Kegiatan Tahunan ${th}`,
+            pesan: pesanPengingatLaporan(th, lap),
+          });
         }
       }
     })();
@@ -95,7 +128,7 @@ const statusMasa = (e, adaData) => {
 };
 
 export function dashboardOf(o) {
-  const th = tahunIni();
+  const th = tahunIni(), bln = +todayJkt().slice(5, 7);
   const files = db.prepare('select jenis_dokumen,nama_file,uploaded_at,pending from dokumen_ormas where ormas_id=? and jenis_dokumen is not null order by pending, id').all(o.id);
   const has = (j) => files.find((d) => d.jenis_dokumen === j);
   const e = expiryInfo(o), ls = o.legal_status || '';
@@ -122,11 +155,18 @@ export function dashboardOf(o) {
   const cpFile = !!has('company_profile');
   const cp = { ada_file: cpFile, terisi: Object.keys(CP_LABEL).length - cpKurang.length, total: Object.keys(CP_LABEL).length, kurang: cpKurang, status: !cpFile ? 'Belum diunggah' : cpKurang.length ? 'Belum lengkap' : 'Lengkap', link: '/portal/data#sec-company-profile' };
 
-  const lap = db.prepare('select tahun,status,dikirim_at,catatan_admin from laporan_tahunan where ormas_id=? order by tahun desc').all(o.id);
+  const lap = db.prepare('select tahun,status,dikirim_at,catatan_admin,dokumentasi_key from laporan_tahunan where ormas_id=? order by tahun desc').all(o.id);
   const cur = lap.find((x) => x.tahun === th);
   const mulai = +String(o.created_at).slice(0, 4) || th;
-  const lapLalu = th - 1 >= mulai && !lap.some((x) => x.tahun === th - 1 && x.status === 'dikirim');
-  const laporan = { tahun: th, status: cur?.status || 'belum', dikirim_at: cur?.dikirim_at || null, arsip: lap.filter((x) => x.status === 'dikirim').length, tahun_lalu_belum: lapLalu ? th - 1 : null, link: '/portal/laporan' };
+  const lapSelesai = (x) => x.status === 'dikirim' || x.status === 'selesai';
+  const lapLalu = th - 1 >= mulai && !lap.some((x) => x.tahun === th - 1 && lapSelesai(x));
+  const kel = kelengkapanLaporan(cur);
+  const laporan = {
+    tahun: th, status: kel.status, status_label: kel.label, kelengkapan: kel.persen, lengkap: kel.lengkap, total: kel.total,
+    dikirim_at: cur?.dikirim_at || null, arsip: lap.filter(lapSelesai).length, tahun_lalu_belum: lapLalu ? th - 1 : null, link: LAP_LINK,
+    pengingat: pengingatLaporanAktif(o, th, cur),
+    bulan_pengingat: bln === 12,
+  };
 
   const cek = [
     ['Identitas Ormas (logo, bentuk, bidang kegiatan, kemantren)', 'sec-identitas', !!(o.logo_key && o.bentuk && o.bidang_kegiatan && o.kemantren)],
@@ -139,7 +179,7 @@ export function dashboardOf(o) {
   const perlu = cek.filter((c) => !c[2]).map(([label, id]) => ({ label, link: `/portal/data#${id}` }));
   if (cp.status !== 'Lengkap') perlu.push({ label: `Company Profile (${cp.status.toLowerCase()})`, link: cp.link });
   for (const d of dok.filter((x) => ['Akan Berakhir', 'Segera Diperbarui', 'Kedaluwarsa'].includes(x.status))) perlu.push({ label: `${d.nama} (${d.status.toLowerCase()})`, link: d.link });
-  if (laporan.status === 'belum' || laporan.status === 'draft' || laporan.status === 'revisi') perlu.push({ label: `Laporan Kegiatan Tahunan ${th} (${laporan.status === 'belum' ? 'belum dibuat' : laporan.status === 'draft' ? 'masih draf' : 'perlu revisi'})`, link: laporan.link });
+  if (butuhLaporan(cur)) perlu.push({ label: `Laporan Kegiatan Tahunan ${th} (${kel.label} · ${kel.persen}% lengkap)`, link: laporan.link });
   if (lapLalu) perlu.push({ label: `Laporan Kegiatan Tahunan ${th - 1} belum dikirim`, link: laporan.link });
 
   const catatan = [];
@@ -166,8 +206,8 @@ export function dashboardOf(o) {
 
 // ---------- Batch 7: laporan kegiatan tahunan ----------
 const LAP_TEXT = { rencana_program: ['Rencana program kegiatan', 5000], pelaksanaan_kegiatan: ['Pelaksanaan program kegiatan', 5000], sumber_dana: ['Sumber dana kegiatan', 500], penutup: ['Penutup', 3000], dokumentasi_link: ['Link dokumentasi', 500] };
-const LAP_COLS = `id,ormas_id,tahun,rencana_program,pelaksanaan_kegiatan,biaya_kegiatan,sumber_dana,dokumentasi_link,dokumentasi_nama,penutup,status,catatan_admin,dikirim_at,created_at,updated_at,(coalesce(dokumentasi_key,'')!='') as ada_dok`;
-function bacaLaporan(b, kirim) {
+const LAP_COLS = `id,ormas_id,tahun,rencana_program,pelaksanaan_kegiatan,biaya_kegiatan,sumber_dana,dokumentasi_link,dokumentasi_nama,penutup,status,catatan_admin,dikirim_at,created_at,updated_at,coalesce(dokumentasi_pending,0) dokumentasi_pending,(coalesce(dokumentasi_key,'')!='') as ada_dok`;
+function bacaLaporan(b, kirim, punyaPdf) {
   const v = {};
   for (const [k, [label, max]] of Object.entries(LAP_TEXT)) {
     v[k] = String(b[k] ?? '').trim();
@@ -177,20 +217,33 @@ function bacaLaporan(b, kirim) {
   if (bi !== '' && !/^\d{1,13}$/.test(bi)) return { err: 'Besaran biaya kegiatan harus berupa angka rupiah tanpa titik atau koma' };
   v.biaya_kegiatan = bi === '' ? null : +bi;
   if (v.dokumentasi_link && !urlOk(v.dokumentasi_link)) return { err: 'Link dokumentasi harus diawali http:// atau https://' };
-  if (kirim) {
-    for (const k of ['rencana_program', 'pelaksanaan_kegiatan', 'sumber_dana', 'penutup']) if (!v[k]) return { err: `Isi "${LAP_TEXT[k][0]}" sebelum mengirim laporan` };
-    if (v.biaya_kegiatan == null) return { err: 'Isi besaran biaya kegiatan sebelum mengirim laporan (isi 0 bila tidak ada biaya)' };
-  }
+  // Laporan kegiatan tahunan berupa satu file PDF yang diunggah ormas; kolom teks tidak wajib diisi.
+  if (kirim && !punyaPdf) return { err: 'Unggah file PDF laporan kegiatan tahunan sebelum mengirim' };
   return { v };
 }
 
-export function laporanStats() {
-  const th = tahunIni();
-  const r = db.prepare(`select count(*) total, sum(l.status='dikirim') dikirim, sum(l.status='draft') draft, sum(l.status='revisi') revisi, sum(l.id is null) belum from ormas o left join laporan_tahunan l on l.ormas_id=o.id and l.tahun=? where (cast(substr(o.created_at,1,4) as integer) <= ? or l.id is not null)`).get(th, th);
-  return { tahun: th, total: r.total || 0, dikirim: r.dikirim || 0, draft: r.draft || 0, revisi: r.revisi || 0, belum: r.belum || 0 };
+export function laporanStats(tahun = tahunIni()) {
+  const rows = db.prepare(`select o.id, coalesce(l.status,'belum') status, (coalesce(l.dokumentasi_key,'')!='') ada_dok from ormas o left join laporan_tahunan l on l.ormas_id=o.id and l.tahun=? where (cast(substr(o.created_at,1,4) as integer) <= ? or l.id is not null)`).all(tahun, tahun);
+  const n = (f) => rows.filter(f).length;
+  const dikirim = n((x) => x.status === 'dikirim');
+  const selesai = n((x) => x.status === 'selesai');
+  const revisi = n((x) => x.status === 'revisi');
+  const draft = n((x) => x.status === 'draft');
+  const belum = n((x) => x.status === 'belum');
+  return {
+    tahun, total: rows.length,
+    sudah_mengirim: dikirim + selesai,
+    belum_mengirim: belum + draft,
+    belum_lengkap: n((x) => x.status === 'belum' || (x.status === 'draft' && !x.ada_dok)),
+    menunggu_verifikasi: dikirim,
+    dikembalikan: revisi,
+    selesai,
+    // kompatibilitas dengan penamaan lama
+    dikirim, draft, revisi, belum,
+  };
 }
 
-export function setupBatch({ app, auth, portalAuth, upload, toDrive, fail, removeStored, sendPdf, cleanName, organizeOrmas, log, notifAdmin }) {
+export function setupBatch({ app, auth, portalAuth, upload, uploadPending, toDrive, siapkanFolderOrmas, promosiLaporan, fail, removeStored, sendPdf, cleanName, organizeOrmas, log, notifAdmin }) {
   const portalWho = (s) => ({ username: s.akun.username, nama_role: 'Ormas' });
 
   // ===== Dashboard ormas (Batch 6) =====
@@ -219,52 +272,52 @@ export function setupBatch({ app, auth, portalAuth, upload, toDrive, fail, remov
     const l = db.prepare('select * from laporan_tahunan where ormas_id=? and tahun=?').get(req.portal.ormas.id, +req.params.tahun);
     if (!l?.dokumentasi_key) return res.status(404).json({ error: 'Dokumentasi tidak ditemukan' });
     req.admin = portalWho(req.portal);
-    sendPdf(req, res, { storage_key: l.dokumentasi_key, mime_type: 'application/pdf', nama_file: l.dokumentasi_nama || 'dokumentasi.pdf', pending: 0, ormas_id: l.ormas_id }, req.query.dl === '1', 'akses_dokumen_ormas');
+    sendPdf(req, res, { storage_key: l.dokumentasi_key, mime_type: 'application/pdf', nama_file: l.dokumentasi_nama || 'dokumentasi.pdf', pending: !!l.dokumentasi_pending, ormas_id: l.ormas_id }, req.query.dl === '1', 'akses_dokumen_ormas');
   });
-  // aksi=simpan (draf) atau aksi=kirim. Laporan yang sudah dikirim terkunci kecuali admin meminta revisi.
-  app.put('/api/portal/laporan/:tahun', portalAuth(), upload, toDrive, (req, res) => {
+  // aksi=simpan (draf) atau aksi=kirim. Berkas dari ormas SELALU menunggu di data/pending;
+  // baru masuk Google Drive/local resmi setelah admin menyetujui lewat "Tandai selesai".
+  app.put('/api/portal/laporan/:tahun', portalAuth(), uploadPending, (req, res) => {
     const o = req.portal.ormas, th = +req.params.tahun, kirim = req.body?.aksi === 'kirim';
     if (!Number.isInteger(th) || th < tahunIni() - 10 || th > tahunIni()) return fail(req, res, 'Tahun laporan tidak valid');
     const ex = db.prepare('select * from laporan_tahunan where ormas_id=? and tahun=?').get(o.id, th);
-    if (ex?.status === 'dikirim') return fail(req, res, 'Laporan yang sudah dikirim tidak dapat diubah. Hubungi admin bila perlu revisi.', 409);
-    const { v, err } = bacaLaporan(req.body || {}, kirim); if (err) return fail(req, res, err);
+    if (ex?.status === 'dikirim' || ex?.status === 'selesai') return fail(req, res, 'Laporan yang sudah dikirim atau selesai tidak dapat diubah. Hubungi admin bila perlu revisi.', 409);
     const f = req.files?.dokumentasi?.[0], rmDok = req.body?.hapus_dokumentasi === '1' && !f;
     const dokKey = f ? f.filename : rmDok ? null : ex?.dokumentasi_key ?? null;
+    const dokPending = f ? 1 : rmDok ? 0 : ex?.dokumentasi_pending ?? 0;
+    const { v, err } = bacaLaporan(req.body || {}, kirim, !!dokKey); if (err) return fail(req, res, err);
     const dokNama = f ? cleanName(f.originalname) : rmDok ? null : ex?.dokumentasi_nama ?? null;
     const status = kirim ? 'dikirim' : ex?.status === 'revisi' ? 'revisi' : 'draft';
     const t = now(), kirimAt = kirim ? t : ex?.dikirim_at ?? null;
     db.transaction(() => {
-      if (ex) db.prepare('update laporan_tahunan set rencana_program=?,pelaksanaan_kegiatan=?,biaya_kegiatan=?,sumber_dana=?,dokumentasi_link=?,dokumentasi_key=?,dokumentasi_nama=?,penutup=?,status=?,dikirim_at=?,updated_at=? where id=?')
-        .run(v.rencana_program, v.pelaksanaan_kegiatan, v.biaya_kegiatan, v.sumber_dana, v.dokumentasi_link, dokKey, dokNama, v.penutup, status, kirimAt, t, ex.id);
-      else db.prepare('insert into laporan_tahunan(ormas_id,tahun,rencana_program,pelaksanaan_kegiatan,biaya_kegiatan,sumber_dana,dokumentasi_link,dokumentasi_key,dokumentasi_nama,penutup,status,dikirim_at,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        .run(o.id, th, v.rencana_program, v.pelaksanaan_kegiatan, v.biaya_kegiatan, v.sumber_dana, v.dokumentasi_link, dokKey, dokNama, v.penutup, status, kirimAt, t, t);
+      if (ex) db.prepare('update laporan_tahunan set rencana_program=?,pelaksanaan_kegiatan=?,biaya_kegiatan=?,sumber_dana=?,dokumentasi_link=?,dokumentasi_key=?,dokumentasi_pending=?,dokumentasi_nama=?,penutup=?,status=?,dikirim_at=?,updated_at=? where id=?')
+        .run(v.rencana_program, v.pelaksanaan_kegiatan, v.biaya_kegiatan, v.sumber_dana, v.dokumentasi_link, dokKey, dokPending, dokNama, v.penutup, status, kirimAt, t, ex.id);
+      else db.prepare('insert into laporan_tahunan(ormas_id,tahun,rencana_program,pelaksanaan_kegiatan,biaya_kegiatan,sumber_dana,dokumentasi_link,dokumentasi_key,dokumentasi_pending,dokumentasi_nama,penutup,status,dikirim_at,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(o.id, th, v.rencana_program, v.pelaksanaan_kegiatan, v.biaya_kegiatan, v.sumber_dana, v.dokumentasi_link, dokKey, dokPending, dokNama, v.penutup, status, kirimAt, t, t);
     })();
-    if (ex?.dokumentasi_key && (f || rmDok)) removeStored(ex.dokumentasi_key);
-    organizeOrmas(o.id);
-    log(req, 'laporan_tahunan', o.id, `${kirim ? 'Mengirim' : 'Menyimpan draf'} Laporan Kegiatan Tahunan ${th}`, 'berhasil', portalWho(req.portal));
+    // Hanya berkas usulan lama yang dibuang. Berkas resmi/Drive lama sengaja dipertahankan sampai admin menyetujui berkas baru.
+    if (ex?.dokumentasi_key && ex.dokumentasi_pending && (f || rmDok)) removeStored(ex.dokumentasi_key, true);
+    log(req, 'laporan_tahunan', o.id, `${kirim ? 'Mengirim' : 'Menyimpan draf'} Laporan Kegiatan Tahunan ${th} (menunggu di server)`, 'berhasil', portalWho(req.portal));
     if (kirim) {
       notify({ jenis: 'ormas', judul: `${o.kode_ormas} mengirim Laporan Tahunan ${th}`, pesan: `Ormas (${o.nama_ormas}) mengirim Laporan Kegiatan Tahunan ${th}, CEK SELENGKAPNYA!`, ormasId: o.id });
-      notifOrmas(o.id, { kategori: 'Information', jenis: 'laporan', judul: `Laporan Kegiatan Tahunan ${th} terkirim`, pesan: `Laporan Kegiatan Tahunan ${th} sudah diterima admin dan tersimpan sebagai arsip.` });
+      notifOrmas(o.id, { kategori: 'Information', jenis: 'laporan', judul: `Laporan Kegiatan Tahunan ${th} menunggu verifikasi`, pesan: `Laporan Kegiatan Tahunan ${th} sudah diterima admin dan berstatus Menunggu Verifikasi.`, kunci: `lap:${th}:dikirim` });
     }
     res.json({ ok: true, status });
   });
 
   // ===== Laporan tahunan: sisi admin (monitoring semua ormas) =====
-  const summary = (th) => {
-    const r = db.prepare(`select count(*) total, sum(l.status='dikirim') dikirim, sum(l.status='draft') draft, sum(l.status='revisi') revisi, sum(l.id is null) belum from ormas o left join laporan_tahunan l on l.ormas_id=o.id and l.tahun=? where (cast(substr(o.created_at,1,4) as integer) <= ? or l.id is not null)`).get(th, th);
-    return { total: r.total || 0, dikirim: r.dikirim || 0, draft: r.draft || 0, revisi: r.revisi || 0, belum: r.belum || 0 };
-  };
+  const summary = (th) => laporanStats(th);
   app.get('/api/admin/laporan', auth('view_ormas'), (req, res) => {
     const th = Math.min(tahunIni(), Math.max(2000, +req.query.tahun || tahunIni()));
-    const status = String(req.query.status || ''), q = String(req.query.q || '').trim();
+    const status0 = String(req.query.status || ''), q = String(req.query.q || '').trim();
+    const status = status0 === 'menunggu_verifikasi' ? 'dikirim' : status0 === 'dikembalikan' ? 'revisi' : status0;
     const page = Math.max(1, +req.query.page || 1), size = 15;
     const w = ['(cast(substr(o.created_at,1,4) as integer) <= ? or l.id is not null)'], p = [th, th];
     if (q) { w.push('(o.nama_ormas like ? or o.kode_ormas like ?)'); p.push(`%${q}%`, `%${q}%`); }
     if (status === 'belum') w.push('l.id is null');
-    else if (['draft', 'dikirim', 'revisi'].includes(status)) { w.push('l.status=?'); p.push(status); }
+    else if (['draft', 'dikirim', 'revisi', 'selesai'].includes(status)) { w.push('l.status=?'); p.push(status); }
     const from = `from ormas o left join laporan_tahunan l on l.ormas_id=o.id and l.tahun=? where ${w.join(' and ')}`;
     const total = db.prepare(`select count(*) c ${from}`).get(...p).c;
-    const items = db.prepare(`select o.id ormas_id,o.kode_ormas,o.nama_ormas,l.id laporan_id,coalesce(l.status,'belum') status,l.dikirim_at,l.updated_at,l.biaya_kegiatan ${from} order by case when l.status='dikirim' then 1 else 0 end, o.id limit ? offset ?`).all(...p, size, (page - 1) * size);
+    const items = db.prepare(`select o.id ormas_id,o.kode_ormas,o.nama_ormas,l.id laporan_id,coalesce(l.status,'belum') status,l.dikirim_at,l.updated_at,coalesce(l.dokumentasi_nama,'') dokumentasi_nama,(coalesce(l.dokumentasi_key,'')!='') ada_dok ${from} order by case when l.status='dikirim' then 1 else 0 end, o.id limit ? offset ?`).all(...p, size, (page - 1) * size);
     res.json({ tahun: th, ringkasan: { tahun: th, ...summary(th) }, items, total, page, pageSize: size });
   });
   app.get('/api/admin/laporan/ormas/:ormasId', auth('view_ormas'), (req, res) => {
@@ -275,7 +328,7 @@ export function setupBatch({ app, auth, portalAuth, upload, toDrive, fail, remov
   app.get('/api/admin/laporan/:id/dokumentasi', auth('view_docs'), (req, res) => {
     const l = db.prepare('select * from laporan_tahunan where id=?').get(+req.params.id);
     if (!l?.dokumentasi_key) return res.status(404).json({ error: 'Dokumentasi tidak ditemukan' });
-    sendPdf(req, res, { storage_key: l.dokumentasi_key, mime_type: 'application/pdf', nama_file: l.dokumentasi_nama || 'dokumentasi.pdf', pending: 0, ormas_id: l.ormas_id }, req.query.dl === '1', 'akses_dokumen_admin');
+    sendPdf(req, res, { storage_key: l.dokumentasi_key, mime_type: 'application/pdf', nama_file: l.dokumentasi_nama || 'dokumentasi.pdf', pending: !!l.dokumentasi_pending, ormas_id: l.ormas_id }, req.query.dl === '1', 'akses_dokumen_admin');
   });
   app.post('/api/admin/laporan/:id/revisi', auth('manage_ormas'), (req, res) => {
     const l = db.prepare('select l.*,o.kode_ormas,o.nama_ormas from laporan_tahunan l join ormas o on o.id=l.ormas_id where l.id=?').get(+req.params.id);
@@ -287,6 +340,25 @@ export function setupBatch({ app, auth, portalAuth, upload, toDrive, fail, remov
     notifOrmas(l.ormas_id, { kategori: 'Required Action', jenis: 'revisi', judul: `Permintaan revisi Laporan Kegiatan Tahunan ${l.tahun}`, pesan: catatan });
     log(req, 'revisi_laporan', l.ormas_id, `Meminta revisi Laporan Kegiatan Tahunan ${l.tahun} ${l.kode_ormas}`);
     notifAdmin(req, `Meminta revisi Laporan Tahunan ${l.tahun} ${l.kode_ormas} (${l.nama_ormas})`, l.ormas_id);
+    res.json({ ok: true });
+  });
+  // Batch 8: admin menyetujui laporan. Di titik inilah berkas pending dipindah ke Drive/local resmi.
+  app.post('/api/admin/laporan/:id/selesai', auth('manage_ormas'), async (req, res) => {
+    const l = db.prepare('select l.*,o.kode_ormas,o.nama_ormas from laporan_tahunan l join ormas o on o.id=l.ormas_id where l.id=?').get(+req.params.id);
+    if (!l) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
+    if (l.status !== 'dikirim') return res.status(400).json({ error: 'Hanya laporan yang menunggu verifikasi yang dapat ditandai selesai' });
+    let baru = l.dokumentasi_key;
+    try {
+      if (l.dokumentasi_pending && l.dokumentasi_key) baru = await promosiLaporan({ key: l.dokumentasi_key, nama: l.dokumentasi_nama, tahun: l.tahun, ormas: l });
+    } catch (e) {
+      return res.status(502).json({ error: `Laporan gagal dipindah ke penyimpanan resmi: ${e.message}` });
+    }
+    db.prepare(`update laporan_tahunan set status='selesai',dokumentasi_key=?,dokumentasi_pending=0,updated_at=? where id=?`).run(baru, now(), l.id);
+    if (baru && l.dokumentasi_key && baru !== l.dokumentasi_key) await removeStored(l.dokumentasi_key, !!l.dokumentasi_pending);
+    organizeOrmas(l.ormas_id);
+    notifOrmas(l.ormas_id, { kategori: 'Information', jenis: 'laporan', judul: `Laporan Kegiatan Tahunan ${l.tahun} selesai`, pesan: `Laporan Kegiatan Tahunan ${l.tahun} sudah diverifikasi admin dan tersimpan di penyimpanan resmi.`, kunci: `lap:${l.tahun}:selesai` });
+    log(req, 'selesai_laporan', l.ormas_id, `Menyetujui Laporan Kegiatan Tahunan ${l.tahun} ${l.kode_ormas}: berkas dipindah dari pending ke Drive`);
+    notifAdmin(req, `Laporan Tahunan ${l.tahun} ${l.kode_ormas} (${l.nama_ormas}) selesai`, l.ormas_id);
     res.json({ ok: true });
   });
 

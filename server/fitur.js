@@ -1,9 +1,8 @@
 // Fitur tambahan SIDOMAS:
 //  - tanggal berlaku SKTO / legal standing -> peringatan mendekati kedaluwarsa + daftar dokumen kedaluwarsa
 //  - notifikasi admin (lonceng + titik merah, bisa ditandai sudah dibaca) dan notifikasi HP (Web Push)
-//  - pengecekan sesi akses PDF ormas (berakhir seketika jika admin mengganti password harian)
-import jwt from 'jsonwebtoken';
-import { db, SECRET, getSetting, setSetting } from './db.js';
+//  - akses PDF katalog terbuka untuk ormas yang dipublikasikan (tanpa password harian)
+import { db, getSetting, setSetting } from './db.js';
 
 const now = () => new Date().toISOString();
 const todayJkt = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
@@ -118,14 +117,6 @@ export function cekKedaluwarsa() {
   } catch (e) { console.error('Pengecekan kedaluwarsa gagal:', e.message); }
 }
 
-// ---------- Sesi akses PDF ormas ----------
-// Token akses PDF hanya sah selama kredensial harian yang dipakai masih aktif. Begitu admin membuat ulang password harian
-// (atau hari berganti), sesi ormas langsung tidak sah.
-export function sessionAktif(p) {
-  if (!p?.cid || !p?.k) return false;
-  return !!db.prepare(`select 1 from kredensial_harian c join ormas o on o.id=c.ormas_id where c.id=? and c.status='aktif' and c.tanggal_berlaku=? and o.kode_ormas=? and o.status_publikasi='Publik'`).get(p.cid, todayJkt(), p.k);
-}
-
 // ---------- Rute ----------
 export function setupFitur({ app, auth }) {
   // Notifikasi lonceng
@@ -173,13 +164,4 @@ export function setupFitur({ app, auth }) {
   // Dokumen kedaluwarsa / mendekati kedaluwarsa
   app.get('/api/admin/kedaluwarsa', auth('view_ormas'), (req, res) => res.json(dokKedaluwarsa([30, 60, 90, 180, 365].includes(+req.query.hari) ? +req.query.hari : SEGERA)));
 
-  // Dicek berkala oleh halaman publik selama PDF terbuka
-  app.get('/api/public/session', (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    try {
-      const p = jwt.verify(String(req.query.token || ''), SECRET);
-      if (p.scope !== 'doc' || !sessionAktif(p)) throw new Error('habis');
-      res.json({ ok: true });
-    } catch { res.status(401).json({ error: 'SESI_HABIS' }); }
-  });
 }

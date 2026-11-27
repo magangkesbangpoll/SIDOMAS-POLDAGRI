@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Checklist Uji SIDOMAS Batch 4–9</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #fff; --ink: #0b2250; --muted: #64748b;
+    --line: #e2e8f0; --ok: #059669; --warn: #d97706; --bad: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { background: linear-gradient(135deg, #0b2250, #123a7a); color: #fff; border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(11,34,80,.18); }
+  h1 { margin: 0 0 6px; font-size: clamp(20px, 3vw, 28px); }
+  header p { margin: 0; color: #cbd5e1; font-size: 14px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-top: 16px; }
+  .bar { height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin: 14px 0 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #0ea5e9, var(--ok)); transition: width .25s ease; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .stat { font-size: 13px; color: var(--muted); }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 9px; padding: 7px 12px; }
+  button:hover { border-color: #94a3b8; }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-top: 16px; overflow: hidden; }
+  section > h2 { margin: 0; font-size: 16px; padding: 14px 18px; background: #f8fafc; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  section > h2 span { font-size: 12px; font-weight: 600; color: var(--muted); }
+  ul { list-style: none; margin: 0; padding: 8px 18px 14px; }
+  li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  li:last-child { border-bottom: 0; }
+  li label { cursor: pointer; flex: 1; }
+  li input { margin-top: 4px; width: 17px; height: 17px; accent-color: var(--ok); flex: none; cursor: pointer; }
+  li.done label { color: var(--muted); text-decoration: line-through; }
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 5px; font-size: 13px; color: #0f172a; }
+  .note { border-left: 3px solid var(--warn); padding-left: 10px; color: var(--muted); font-size: 14px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; opacity: 0; pointer-events: none; transition: .25s; font-size: 14px; z-index: 9; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media print {
+    body { background: #fff; } header { box-shadow: none; } button, #toast { display: none !important; }
+    section, .panel { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Checklist Uji SIDOMAS — Batch 4–9</h1>
+    <p>Centang langsung di sini. Progres tersimpan otomatis di browser ini (localStorage). Item Batch 8–10 ada di bawah.</p>
+  </header>
+
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <b id="judul-progres">Progres: 0 / 80 (0%)</b>
+      <div class="row">
+        <button id="btn-copy">Salin yang belum dicek</button>
+        <button id="btn-print">Cetak</button>
+        <button id="btn-reset">Reset progres</button>
+      </div>
+    </div>
+    <div class="bar" role="progressbar" aria-label="Progres checklist"><i id="isi-bar"></i></div>
+    <div class="stat">Centang item setelah benar-benar diuji di aplikasi. Data tidak terkirim ke mana pun.</div>
+  </div>
+
+  <section data-group="persiapan">
+    <h2>Persiapan <span data-hitung>0/4</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c1"><label for="c1">Jalankan <code>npm run dev</code> di folder <code>SIDOMAS-POLDAGRI-main</code> (server + client).</label></li>
+      <li><input type="checkbox" id="c2"><label for="c2">Siapkan 3 sesi: <b>admin</b> (<code>/admin/login</code>), <b>ormas</b> (<code>/ormas-login</code>), dan <b>publik</b> (incognito, <code>/katalog</code>).</label></li>
+      <li><input type="checkbox" id="c3"><label for="c3">Jalankan <code>npm run typecheck</code> di <code>client/</code> → lolos.</label></li>
+      <li><input type="checkbox" id="c4"><label for="c4">Jalankan <code>npm run build</code> di <code>client/</code> → lolos (peringatan ukuran chunk bawaan Vite boleh diabaikan).</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b4">
+    <h2>Batch 4 — Legal Standing <span data-hitung>0/7</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c5"><label for="c5"><code>/daftar</code>: pilih <b>Ya, sudah memiliki</b> → muncul Jenis, Nomor, Tahun, Berlaku Sampai.</label></li>
+      <li><input type="checkbox" id="c6"><label for="c6"><code>/daftar</code>: pilih <b>Tidak memiliki</b> → field dokumen hilang, muncul teks persis <b>"Anda Tidak Bisa Mengisi Karena Tidak Memiliki Legal Standing."</b></label></li>
+      <li><input type="checkbox" id="c7"><label for="c7">Submit pendaftaran status TIDAK → di <code>/admin/pendaftaran</code> status tetap terbaca (bukan kosong).</label></li>
+      <li><input type="checkbox" id="c8"><label for="c8"><code>/portal/data</code>: ubah status ke TIDAK, simpan → <code>/admin/ormas?detail=&lt;id&gt;</code> menampilkan badge "Tidak memiliki", field dokumen kosong.</label></li>
+      <li><input type="checkbox" id="c9"><label for="c9"><code>/admin/ormas</code>: filter <b>Sudah memiliki / Tidak memiliki / Belum dijawab</b> → hasil sesuai.</label></li>
+      <li><input type="checkbox" id="c10"><label for="c10"><code>/admin/ekspor</code>: filter Legal Standing → Excel kolom "Memiliki Legal Standing" terisi Ya/Tidak/Belum ditentukan.</label></li>
+      <li><input type="checkbox" id="c11"><label for="c11"><code>/admin</code>: kartu "Sudah memiliki" dan "Belum memiliki Legal Standing" angkanya sesuai; panel "Legal Standing perlu perhatian" berisi daftar ormas.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b5">
+    <h2>Batch 5 — Dua nomor telepon <span data-hitung>0/6</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c12"><label for="c12">Field terpisah <b>Nomor telepon pribadi ketua</b> dan <b>Nomor telepon resmi ormas</b> ada di <code>/daftar</code>, <code>/portal/data</code>, dan form tambah/edit <code>/admin/ormas</code>.</label></li>
+      <li><input type="checkbox" id="c13"><label for="c13"><code>/ormas/&lt;kode&gt;</code> (publik): nomor ketua tampil seperti <code>08********23</code> dengan keterangan "(WhatsApp ketua, disamarkan)" dan <b>bukan</b> tautan <code>wa.me</code>.</label></li>
+      <li><input type="checkbox" id="c14"><label for="c14">Di halaman yang sama: telepon ormas tampil lengkap dan bisa diklik (<code>tel:</code>).</label></li>
+      <li><input type="checkbox" id="c15"><label for="c15"><code>/admin/ormas?detail=&lt;id&gt;</code>: kedua nomor tampil utuh tanpa bintang; label perubahan tidak tertukar.</label></li>
+      <li><input type="checkbox" id="c16"><label for="c16">DevTools → Network → response <code>/api/public/ormas/&lt;kode&gt;</code>: nomor ketua <b>sudah termasker dari server</b> (frontend tidak menggandakan masking).</label></li>
+      <li><input type="checkbox" id="c17"><label for="c17">Data lama yang belum punya <code>telepon_ormas</code>/<code>legal_status</code> tidak hilang saat admin menyimpan edit (KEEP_IF_MISSING masih bekerja).</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b6">
+    <h2>Batch 6 — Dashboard ormas <span data-hitung>0/7</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c18"><label for="c18"><code>/portal/dashboard</code> (juga <code>/portal</code>): 4 kartu atas terisi — status profil, Company Profile, Legal Standing, laporan tahunan.</label></li>
+      <li><input type="checkbox" id="c19"><label for="c19">Tabel monitoring dokumen: 8 baris dengan status salah satu dari <code>Aktif</code>, <code>Akan Berakhir</code>, <code>Segera Diperbarui</code>, <code>Kedaluwarsa</code>, <code>Belum Memiliki Data</code>; tautan "Perbarui" ke anchor benar (mis. <code>#sec-skto</code>, <code>#sec-legal</code>).</label></li>
+      <li><input type="checkbox" id="c20"><label for="c20">Akses cepat hanya <b>2 menu</b>: Company Profile dan Laporan Kegiatan Tahunan. Klik Company Profile → langsung ke <code>/portal/data</code> dan menggulir ke bagian unggah Company Profile; klik Laporan → langsung ke <code>/portal/laporan</code>.</label></li>
+      <li><input type="checkbox" id="c21"><label for="c21">Panel "Dokumen akan habis" dan "Data yang perlu diperbarui" tidak kosong pada ormas yang memang punya masalah.</label></li>
+      <li><input type="checkbox" id="c22"><label for="c22">Notifikasi: klik satu → pindah ke halaman terkait dan unread berkurang; tombol "Tandai dibaca" membuat unread jadi 0.</label></li>
+      <li><input type="checkbox" id="c23"><label for="c23">Badge kategori notifikasi/pengumuman terbaca <code>Information</code>, <code>Warning</code>, atau <code>Required Action</code>.</label></li>
+      <li><input type="checkbox" id="c24"><label for="c24">Buat pengumuman di <code>/admin/pengumuman</code> → muncul <b>paling atas sendiri</b> di dashboard ormas (sebelum sapaan/kartu), bukan di bawah notifikasi. Cek juga tema gelap/terang dan lebar ponsel.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b7">
+    <h2>Batch 7 — Laporan tahunan <span data-hitung>0/10</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c25"><label for="c25"><code>/portal/laporan</code>: pilih tahun lain → PDF tahun itu yang tampil; arsip tahun sebelumnya tetap ada di tabel riwayat.</label></li>
+      <li><input type="checkbox" id="c26"><label for="c26">Unggah <b>satu file PDF</b> → <b>Simpan draf</b> → status Draf, bisa diganti lagi. Tidak ada kolom teks rencana/pelaksanaan/biaya/sumber dana/penutup.</label></li>
+      <li><input type="checkbox" id="c27"><label for="c27"><b>Kirim laporan</b> → status "Sudah dikirim", form terkunci, arsip tidak hilang.</label></li>
+      <li><input type="checkbox" id="c28"><label for="c28">Coba PUT/ubah laporan terkirim lewat DevTools → server menolak dengan <code>409</code>.</label></li>
+      <li><input type="checkbox" id="c29"><label for="c29">Kirim tanpa PDF ditolak; file bukan PDF ditolak; file di atas batas <code>max_pdf_mb</code> ditolak. Tidak ada validasi biaya/link lagi.</label></li>
+      <li><input type="checkbox" id="c30"><label for="c30">PDF laporan bisa diunggah, dilihat, diunduh; checkbox "Ganti/hapus berkas" berfungsi saat simpan draf.</label></li>
+      <li><input type="checkbox" id="c31"><label for="c31"><code>/admin/laporan</code>: semua ormas tampil (termasuk "Belum ada PDF"), PDF bisa dilihat dan diunduh dari tabel maupun arsip.</label></li>
+      <li><input type="checkbox" id="c32"><label for="c32">Admin klik <b>Minta revisi</b> → ormas dapat notifikasi <code>Required Action</code>, status jadi "Perlu revisi", catatan admin tampil, ormas bisa unggah PDF perbaikan lalu kirim ulang.</label></li>
+      <li><input type="checkbox" id="c33"><label for="c33">Dari akun ormas A, coba buka <code>/api/portal/laporan/&lt;id milik B&gt;</code> → harus 404/tertolak.</label></li>
+      <li><input type="checkbox" id="c34"><label for="c34">Laporan yang sudah dikirim masih bisa dilihat admin setelah ormas mengubah draf tahun berjalan berikutnya.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b8">
+    <h2>Batch 8 — Pengingat laporan tahunan <span data-hitung>0/12</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c55"><label for="c55">Di luar Desember (mis. 27 Nov 2026) buka <code>/portal/dashboard</code> → <b>tidak ada</b> banner pengingat. Ubah tanggal sistem ke 1–31 Desember → banner muncul.</label></li>
+      <li><input type="checkbox" id="c56"><label for="c56">Banner memuat pesan persis: <b>"Pengingat Laporan Kegiatan Tahunan. Segera lengkapi dan kirim Laporan Kegiatan Tahunan untuk tahun berjalan sebelum pergantian tahun."</b></label></li>
+      <li><input type="checkbox" id="c57"><label for="c57">Banner menampilkan <b>tahun laporan berjalan</b>, <b>status</b> saat ini, serta <b>persentase/indikator kelengkapan</b> laporan.</label></li>
+      <li><input type="checkbox" id="c58"><label for="c58">Banner memuat tautan <code>/portal/laporan</code> yang langsung membuka halaman laporan saat diklik.</label></li>
+      <li><input type="checkbox" id="c59"><label for="c59">Untuk laporan yang belum selesai (belum ada PDF/draf), banner menampilkan peringatan bahwa laporan belum selesai.</label></li>
+      <li><input type="checkbox" id="c60"><label for="c60">Ormas menekan <b>Kirim laporan</b> → status berubah menjadi <b>Menunggu Verifikasi</b> dan pengingat di dashboard hilang.</label></li>
+      <li><input type="checkbox" id="c61"><label for="c61">Admin menekan <b>Tandai selesai</b> → status <b>Selesai</b>; buka dashboard ormas lagi → tidak ada pengingat.</label></li>
+      <li><input type="checkbox" id="c62"><label for="c62">Saat Desember, refresh halaman / buka ulang dashboard → banner tetap muncul (tidak hanya saat login pertama).</label></li>
+      <li><input type="checkbox" id="c63"><label for="c63">Banner hanya <b>satu</b> di dashboard, tidak bertumpuk setelah refresh, klik notifikasi, atau pindah halaman.</label></li>
+      <li><input type="checkbox" id="c64"><label for="c64"><code>/admin</code> menampilkan 6 kategori: <b>sudah mengirim, belum mengirim, belum lengkap, menunggu verifikasi, dikembalikan, selesai</b>; angkanya sesuai data.</label></li>
+      <li><input type="checkbox" id="c65"><label for="c65"><code>/admin/laporan</code>: filter <b>Menunggu Verifikasi</b> dan <b>Dikembalikan</b> menampilkan baris yang tepat.</label></li>
+      <li><input type="checkbox" id="c66"><label for="c66">Alur revisi: admin mengembalikan laporan → ormas mendapat notifikasi, dapat unggah PDF perbaikan, kirim ulang, lalu admin menandai selesai.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b9">
+    <h2>Batch 9 — Penghapusan Password Harian <span data-hitung>0/14</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c67"><label for="c67">Sidebar <code>/admin</code> tidak ada menu <b>Password Harian</b> dan tidak ada ikon kunci terkait.</label></li>
+      <li><input type="checkbox" id="c68"><label for="c68">Buka langsung <code>/admin/password-harian</code> → halaman tidak tersedia / dialihkan, bukan daftar kredensial.</label></li>
+      <li><input type="checkbox" id="c69"><label for="c69">DevTools → Network: tidak ada request sukses ke <code>/api/admin/credentials</code>, <code>/api/public/ormas/&lt;kode&gt;/access</code>, atau <code>/api/public/session</code> (semua 404).</label></li>
+      <li><input type="checkbox" id="c70"><label for="c70">Tidak ada tombol generate, input username/password, notifikasi "Segera berakhir", atau modal <b>"Sesi Anda Telah Habis"</b> di seluruh aplikasi.</label></li>
+      <li><input type="checkbox" id="c71"><label for="c71">Setelah server start, tabel SQLite <code>kredensial_harian</code> tidak ada (<code>sqlite_master</code> kosong untuk nama itu).</label></li>
+      <li><input type="checkbox" id="c72"><label for="c72">Semua baris <code>dokumen_ormas</code> punya <code>klasifikasi_akses='publik'</code> dan flag <code>batch9_pw_harian_dihapus=done</code>.</label></li>
+      <li><input type="checkbox" id="c73"><label for="c73">Dari <code>/katalog</code> → <code>/ormas/&lt;kode&gt;</code>, klik <b>Lihat</b> pada <b>Company Profile</b> → PDF/PPT terbuka tanpa username/password.</label></li>
+      <li><input type="checkbox" id="c74"><label for="c74">Klik <b>Unduh</b> pada Company Profile → berkas terunduh tanpa parameter <code>?token=</code> dan tanpa halaman login.</label></li>
+      <li><input type="checkbox" id="c75"><label for="c75">Ormas berstatus bukan <b>Publik</b> / pendaftaran yang masih menunggu acc tidak bisa diakses lewat <code>/api/public/files/&lt;id&gt;</code> (404/403).</label></li>
+      <li><input type="checkbox" id="c76"><label for="c76">Login admin (<code>/admin/login</code>) dan login ormas (<code>/ormas-login</code>) masih berhasil; ganti password masih berfungsi.</label></li>
+      <li><input type="checkbox" id="c77"><label for="c77"><code>/admin/ekspor</code> hanya mengekspor Excel ormas; kartu <b>Unduh kredensial</b> sudah hilang.</label></li>
+      <li><input type="checkbox" id="c78"><label for="c78">Halaman awal tidak menyebut "kredensial harian"; teksnya menyebut dokumen dibuka tanpa username/password tambahan.</label></li>
+      <li><input type="checkbox" id="c79"><label for="c79">Halaman Login Ormas dan modal akun ormas di <code>/admin/ormas</code> menjelaskan akun hanya untuk portal, bukan password harian.</label></li>
+      <li><input type="checkbox" id="c80"><label for="c80">Tabel <code>roles</code> tidak lagi memuat permission <code>view_credentials</code>, <code>manage_credentials</code>, atau <code>export_credentials</code>.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="drive">
+    <h2>Google Drive — folder per ormas <span data-hitung>0/15</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c41"><label for="c41"><bDeploy ulang</b> Apps Script dari <code>docs/google-apps-script.gs</code>: Manage deployments → pensil → Version <b>New version</b> → Deploy. URL <code>/exec</code> tidak berubah.</label></li>
+      <li><input type="checkbox" id="c42"><label for="c42">Daftar ormas baru lewat <code>/daftar</code> → berkas masih di penyimpanan sementara server; <b>belum ada folder Drive</b>, katalog belum berubah, status di <code>/admin/pendaftaran</code> = <b>Tindak lanjuti</b>.</label></li>
+      <li><input type="checkbox" id="c43"><label for="c43">Admin menyetujui pendaftaran → di dalam folder induk <b>DATABASE SIDOMAS POLDAGRI (DEMO)</b> muncul <b>satu</b> folder <code>Ormas-XXX - Nama Ormas</code> berisi <b>PDF dan foto profil ormas itu saja</b>. Tidak ada file yang tersebar di luar folder induk.</label></li>
+      <li><input type="checkbox" id="c44"><label for="c44">Daftar &amp; setujui ormas <b>kedua</b> → folder kedua muncul terpisah di dalam folder induk yang sama. Tidak ada berkas ormas lain di dalamnya, dan folder induk tidak menumpuk berkas lepas.</label></li>
+      <li><input type="checkbox" id="c45"><label for="c45">Ormas unggah PDF laporan di <code>/portal/laporan</code> → baru tersimpan di <code>data/pending</code>, <b>belum ke Drive</b>; setelah admin <b>Tandai selesai</b> PDF masuk folder ormas dengan nama <code>Laporan Kegiatan Tahunan 2025 - &lt;nama file&gt;</code>.</label></li>
+      <li><input type="checkbox" id="c46"><label for="c46">Ormas mengajukan perubahan dokumen → admin verifikasi di <code>/admin/ormas?detail=&lt;id&gt;</code> → berkas baru masuk ke folder ormas yang sama, folder lama tetap rapi.</label></li>
+      <li><input type="checkbox" id="c47"><label for="c47">Jalankan <code>node server/test-drive.js</code> → berhasil membuat folder uji, mengunggah PDF + logo <b>di dalam folder itu</b>, mengunduhnya kembali, lalu membersihkannya.</label></li>
+      <li><input type="checkbox" id="c48"><label class="note" for="c48">Data lama yang sudah menumpuk: jalankan <code>npm run organize-drive</code> sekali setelah skrip baru aktif untuk memindahkan berkas yang masih tercatat di database ke folder ormas masing-masing.</label></li>
+      <li><input type="checkbox" id="c49"><label for="c49">Ormas sudah terdaftar mengubah <b>data apa pun</b> di <code>/portal/data</code> (teks/logo/PDF) → katalog masih menampilkan data lama, status <b>Perlu Diverifikasi</b>, dan Drive belum berubah.</label></li>
+      <li><input type="checkbox" id="c50"><label for="c50">Admin menyetujui perubahan di <code>/admin/ormas?detail=&lt;id&gt;</code> → data baru langsung tampil di katalog; berkas lama di folder Drive ormas <b>dihapus</b>, digantikan berkas baru yang diunggah.</label></li>
+      <li><input type="checkbox" id="c51"><label for="c51">Pendaftaran baru yang masih menunggu acc: cek <code>/katalog</code> <b>tidak muncul</b>, folder Drive <b>belum dibuat</b>, berkas hanya ada di <code>data/pending</code> di server.</label></li>
+      <li><input type="checkbox" id="c52"><label for="c52">Sisa file uji/upload gagal di folder induk Drive sudah dibersihkan dengan <code>npm run bersihkan-sisa-drive -- --confirm</code> setelah script versi terbaru di-deploy. Folder ormas dan <code>BACKUP-DATABASE</code> tidak tersentuh.</label></li>
+      <li><input type="checkbox" id="c53"><label for="c53">Jalankan <code>npm run laporan-drive</code>: terlihat jelas file lepas di induk dan daftar folder ormas beserta jumlah file di dalamnya (tidak mengubah apa pun).</label></li>
+      <li><input type="checkbox" id="c54"><label for="c54">Folder uji/yatim seperti <code>Ormas-999 - TES-SIDOMAS</code> dibuang dengan <code>npm run bersihkan-folder-yatim -- --confirm</code>; folder ormas aktif tetap aman.</label></li>
+      <li><input type="checkbox" id="c81"><label for="c81">Admin menekan <b>Setujui</b> (pendaftaran baru), <b>Verifikasi dan terapkan</b> (perubahan data/file), <b>Tandai selesai</b> (laporan), atau <b>Simpan</b> (tambah/edit ormas) → muncul <b>progress bar bertahap</b> dengan nama ormas, bukan spinner biasa; overlay hilang setelah server merespons.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="b10">
+    <h2>Batch 10 — Tracking pendaftaran & revisi <span data-hitung>0/29</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c82"><label for="c82">Setiap pendaftaran mendapat <b>Tracking ID</b> unik otomatis setelah submit; format tidak berurutan dan tidak mudah ditebak.</label></li>
+      <li><input type="checkbox" id="c83"><label for="c83">Layar sukses pendaftaran menampilkan Tracking ID dan tombol <b>Salin</b> yang benar-benar mengisi clipboard.</label></li>
+      <li><input type="checkbox" id="c84"><label for="c84">Ada tombol <b>Unduh/Simpan info Tracking ID</b> (file <code>.txt</code> atau <code>.json</code>) agar ormas tidak kehilangan ID.</label></li>
+      <li><input type="checkbox" id="c85"><label for="c85">Tracking ID <b>bukan</b> satu-satunya akses: tanpa <b>Kode OTP</b> tidak ada data yang tampil.</label></li>
+      <li><input type="checkbox" id="c86"><label for="c86">Ada <b>dua kanal OTP</b>: email dan WhatsApp. Kode 6 digit dikirim sesuai pilihan; server hanya menyimpan <b>hash</b>-nya dan menghapusnya setelah dipakai.</label></li>
+      <li><input type="checkbox" id="c87"><label for="c87">OTP tidak bisa diturunkan dari Tracking ID (acak 6 digit, berbeda setiap permintaan, berlaku 10 menit); OTP WA tidak tertahan aturan 1 pesan/24 jam.</label></li>
+
+      <li><input type="checkbox" id="c88"><label for="c88">Menu <b>Tracking Pendaftaran</b> tersedia di halaman publik untuk pendaftar; <b>tidak</b> muncul di portal ormas yang sudah login.</label></li>
+      <li><input type="checkbox" id="c89"><label for="c89">Halaman <code>/tracking</code> bisa memilih kirim OTP lewat <b>email</b> atau <b>WhatsApp</b>, lalu menerima kode 6 digit dan menampilkan status pengajuan.</label></li>
+      <li><input type="checkbox" id="c90"><label for="c90">Informasi yang tampil menyesuaikan status &amp; hak akses (belum diperiksa, dikembalikan, disetujui, hangus).</label></li>
+      <li><input type="checkbox" id="c91"><label for="c91">Sebelum verifikasi berhasil, halaman tidak menampilkan nama ormas, dokumen, maupun catatan admin.</label></li>
+
+      <li><input type="checkbox" id="c92"><label for="c92">Salah Kode OTP berulang kali → <b>rate limit / kunci sementara</b>, bukan percobaan tanpa batas; permintaan OTP dibatasi 1 menit per kanal per ID dan 1 menit per nomor WA.</label></li>
+      <li><input type="checkbox" id="c93"><label for="c93">Error verifikasi <b>generik</b>: tidak membedakan "ID salah" dan "kode salah" (anti enumerasi ID).</label></li>
+      <li><input type="checkbox" id="c94"><label for="c94">Setelah verifikasi, sesi tracking berupa cookie bertanda tangan; backend memvalidasi hak akses di setiap request.</label></li>
+      <li><input type="checkbox" id="c95"><label for="c95">Dokumen pendaftaran/revisi hanya bisa diunduh lewat endpoint tracking yang memeriksa sesi.</label></li>
+      <li><input type="checkbox" id="c96"><label for="c96">Menyalin URL dokumen tracking ke tab/browser lain tanpa sesi → ditolak, tidak otomatis terbuka.</label></li>
+      <li><input type="checkbox" id="c97"><label for="c97">Verifikasi gagal → response tanpa data sensitif dan tanpa petunjuk apakah ID tersebut ada.</label></li>
+
+      <li><input type="checkbox" id="c98"><label for="c98">Halaman tracking menampilkan: nama ormas, Tracking ID, tanggal daftar, status, progress, riwayat status, dan catatan admin.</label></li>
+      <li><input type="checkbox" id="c99"><label for="c99">Tanggal pengembalian, batas akhir revisi, dan <b>countdown</b> terlihat jelas bila status Dikembalikan.</label></li>
+      <li><input type="checkbox" id="c100"><label for="c100">Seluruh data &amp; dokumen yang dikirim tampil dengan <b>status verifikasi per item</b> (terverifikasi / revisi / pending). Bila semua item <b>Terverifikasi (terkunci)</b>, tombol berubah menjadi <b>Setujui pendaftaran ormas</b>: berkas diunggah ke folder Drive ormas dengan progress bar dan data tampil di katalog.</label></li>
+
+      <li><input type="checkbox" id="c101"><label for="c101">Indikator item: <b>hijau + centang + terkunci</b>, <b>merah + silang + catatan admin + bisa diedit</b>, <b>kuning/pending</b> tidak dianggap terverifikasi.</label></li>
+
+      <li><input type="checkbox" id="c102"><label for="c102">Ormas hanya bisa mengubah item berstatus <b>perlu revisi</b>; item terverifikasi tetap terkunci walaupun dikirim field lain.</label></li>
+      <li><input type="checkbox" id="c103"><label for="c103">Revisi dikirim → status kembali ke admin; field revisi terkunci sampai admin membuka kembali.</label></li>
+      <li><input type="checkbox" id="c104"><label for="c104">Revisi bisa diulang selama masih dalam batas waktu; setiap pengembalian memulai jendela baru.</label></li>
+
+      <li><input type="checkbox" id="c105"><label for="c105">Batas revisi maksimal <b>30 hari kalender</b> dihitung sejak status Dikembalikan (bukan sejak daftar).</label></li>
+      <li><input type="checkbox" id="c106"><label for="c106">Ada pengingat menjelang batas waktu (email bila SMTP aktif; minimal notifikasi admin/log bila belum). OTP tracking juga dikirim lewat email yang sama.</label></li>
+      <li><input type="checkbox" id="c107"><label for="c107">Lewat batas → status <b>Hangus/Kedaluwarsa</b>, form revisi ditutup, admin masih bisa membaca data &amp; riwayat.</label></li>
+      <li><input type="checkbox" id="c108"><label for="c108">Admin dapat memberi <b>izin khusus</b> pengajuan ulang untuk pengajuan yang sudah hangus.</label></li>
+
+      <li><input type="checkbox" id="c109"><label for="c109"><b>Company Profile tetap muncul di katalog</b> untuk ormas berstatus Publik, baik berasal dari pendaftaran, portal ormas, maupun input admin SIDOMAS setelah disetujui.</label></li>
+      <li><input type="checkbox" id="c110"><label for="c110">Data pendaftaran, berkas pending/revisi, laporan tahunan, catatan admin, dan <b>PDF selain Company Profile tidak muncul di katalog</b> (tetap tersimpan di Google Drive untuk admin).</label></li>
+    </ul>
+  </section>
+
+  <section data-group="regresi">
+    <h2>Bug typo &amp; regresi <span data-hitung>0/3</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c35"><label for="c35"><code>/daftar</code>: nama ormas persis sama dengan pendaftaran berstatus "Tindak lanjuti" → harus ditolak (typo <code>tindaklanjut</code> sudah diperbaiki).</label></li>
+      <li><input type="checkbox" id="c36"><label for="c36">Login admin/ormas, ganti password, lupa password, dan buka PDF publik langsung tanpa kredensial harian → masih normal.</label></li>
+      <li><input type="checkbox" id="c37"><label for="c37">Export Excel ormas masih bisa diunduh dan kolom baru ikut ada.</label></li>
+    </ul>
+  </section>
+
+  <section data-group="catatan">
+    <h2>Catatan penting <span data-hitung>0/3</span></h2>
+    <ul>
+      <li><input type="checkbox" id="c38"><label for="c38">Select Legal Standing sengaja <b>wajib dipilih</b> supaya status selalu terkirim ke database.</label></li>
+      <li><input type="checkbox" id="c39"><label class="note" for="c39">Di kartu katalog (<code>/katalog</code>) nomor telepon <b>tidak</b> ditampilkan — masking tampil di halaman detail ormas. API list publik memang belum mengirim field telepon. Bisa ditambahkan ke server bila diinginkan.</label></li>
+      <li><input type="checkbox" id="c40"><label class="note" for="c40">Pengumuman: endpoint PUT hanya mengubah status aktif/nonaktif. Untuk mengganti judul/isi, hapus lalu buat baru.</label></li>
+    </ul>
+  </section>
+
+  <footer>Checklist lokal • tidak mengubah kode aplikasi • tersimpan di browser ini saja</footer>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var KEY = 'sidomas-checklist-b4-7-v1';
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type="checkbox"]'));
+  var bar = document.getElementById('isi-bar');
+  var judul = document.getElementById('judul-progres');
+  var toast = document.getElementById('toast');
+  var timer;
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function save() {
+    var state = {};
+    boxes.forEach(function (b) { if (b.checked) state[b.id] = true; });
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage penuh/diblokir */ }
+  }
+  function pesan(text) {
+    toast.textContent = text; toast.classList.add('show');
+    clearTimeout(timer); timer = setTimeout(function () { toast.classList.remove('show'); }, 2200);
+  }
+  function update() {
+    var state = load();
+    boxes.forEach(function (b) {
+      b.checked = !!state[b.id];
+      b.closest('li').classList.toggle('done', b.checked);
+    });
+    var total = boxes.length, done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = total ? Math.round(done / total * 100) : 0;
+    bar.style.width = pct + '%';
+    judul.textContent = 'Progres: ' + done + ' / ' + total + ' (' + pct + '%)';
+    document.querySelectorAll('section[data-group]').forEach(function (s) {
+      var all = s.querySelectorAll('input[type="checkbox"]');
+      var yes = s.querySelectorAll('input[type="checkbox"]:checked').length;
+      s.querySelector('[data-hitung]').textContent = yes + '/' + all.length;
+    });
+  }
+
+  boxes.forEach(function (b) { b.addEventListener('change', function () { save(); update(); }); });
+
+  document.getElementById('btn-reset').addEventListener('click', function () {
+    if (!confirm('Hapus semua centangan dan mulai dari awal?')) return;
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    update(); pesan('Progres direset.');
+  });
+
+  document.getElementById('btn-print').addEventListener('click', function () { window.print(); });
+
+  document.getElementById('btn-copy').addEventListener('click', function () {
+    var sisa = [];
+    document.querySelectorAll('section[data-group]').forEach(function (s) {
+      var label = s.querySelector('h2').firstChild.textContent.trim();
+      var belum = [];
+      s.querySelectorAll('li').forEach(function (li) {
+        if (!li.querySelector('input').checked) belum.push('- ' + li.querySelector('label').textContent.replace(/\s+/g, ' ').trim());
+      });
+      if (belum.length) sisa.push(label + '\n' + belum.join('\n'));
+    });
+    var teks = sisa.length ? 'Belum dicek:\n\n' + sisa.join('\n\n') : 'Semua item sudah dicek ✅';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(teks).then(function () { pesan('Ringkasan disalin ke clipboard.'); }).catch(function () { pesan('Gagal menyalin: ' + teks.slice(0, 60)); });
+    } else { pesan('Clipboard tidak tersedia di browser ini.'); }
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>

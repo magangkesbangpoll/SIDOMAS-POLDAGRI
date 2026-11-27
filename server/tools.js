@@ -7,13 +7,16 @@
 //   npm run set-email -- admin email@contoh.id  -> ubah email akun admin
 //   npm run backup-now                          -> backup database ke Google Drive sekarang
 //   npm run rapikan-drive                       -> pindahkan semua PDF dan logo ke folder ormas masing-masing di Drive
+//   npm run bersihkan-sisa-drive -- --confirm   -> buang file lepas di folder induk yang tidak tercatat di database
+//   npm run laporan-drive                       -> lihat file lepas di induk + daftar folder ormas dan jumlah isinya
+//   npm run bersihkan-folder-yatim -- --confirm -> buang folder ormas yang kodenya tidak ada di database (termasuk folder uji)
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { db } from './db.js';
 import { backupDb } from './backup.js';
-import { driveOn, driveOrganize } from './drive.js';
+import { driveOn, driveOrganize, driveCleanRoot, driveLaporan, driveCleanFoldersYatim } from './drive.js';
 
 const [cmd, ...args] = process.argv.slice(2);
 const stop = (msg) => { console.error(`\nGAGAL: ${msg}\n`); process.exit(1); };
@@ -84,12 +87,53 @@ if (cmd === 'admins') {
   let dipindah = 0;
   console.log(`\nMerapikan ${semua.length} ormas ...`);
   for (const o of semua) {
-    const ids = [...db.prepare('select storage_key from dokumen_ormas where ormas_id=?').all(o.id).map((r) => r.storage_key), o.logo_key].filter((k) => String(k || '').startsWith('gd:')).map((k) => k.slice(3));
+    const ids = [...db.prepare('select storage_key from dokumen_ormas where ormas_id=?').all(o.id).map((r) => r.storage_key), ...db.prepare('select dokumentasi_key k from laporan_tahunan where ormas_id=?').all(o.id).map((r) => r.k), o.logo_key].filter((k) => String(k || '').startsWith('gd:')).map((k) => k.slice(3));
     if (!ids.length) continue;
     try { const r = await driveOrganize(o.kode_ormas, o.nama_ormas, ids); dipindah += r.moved || 0; console.log(`  ${o.kode_ormas}: ${ids.length} file, ${r.moved || 0} dipindah`); }
     catch (e) { console.log(`  ${o.kode_ormas}: GAGAL (${e.message})`); }
   }
   console.log(`\nSELESAI. ${dipindah} file dipindah ke folder ormas masing-masing.\n`);
+
+} else if (cmd === 'bersihkan-sisa-drive') {
+  if (!driveOn()) stop('GDRIVE_URL dan/atau GDRIVE_SECRET belum diisi di file .env.');
+  if (!args.includes('--confirm')) stop('Perintah ini membuang file ke Sampah Drive. Tambahkan --confirm setelah perintah untuk melanjutkan.');
+  const kunci = [
+    ...db.prepare("select storage_key k from dokumen_ormas where storage_key like 'gd:%'").all().map((r) => r.k),
+    ...db.prepare("select dokumentasi_key k from laporan_tahunan where dokumentasi_key like 'gd:%'").all().map((r) => r.k),
+    ...db.prepare("select logo_key k from ormas where logo_key like 'gd:%'").all().map((r) => r.k),
+  ].filter(Boolean).map((k) => k.slice(3));
+  const whitelist = [...new Set(kunci)];
+  console.log(`\n${whitelist.length} file masih dipakai database (tidak akan disentuh).`);
+  try {
+    const r = await driveCleanRoot(whitelist);
+    console.log(`SELESAI. ${r.dihapus || 0} file lepas di folder induk dipindah ke Sampah Drive.`);
+    (r.nama || []).slice(0, 30).forEach((n) => console.log(`  - ${n}`));
+    if ((r.dihapus || 0) > 30) console.log(`  ... dan ${r.dihapus - 30} file lainnya`);
+  } catch (e) { stop(e.message); }
+
+} else if (cmd === 'laporan-drive') {
+  if (!driveOn()) stop('GDRIVE_URL dan/atau GDRIVE_SECRET belum diisi di file .env.');
+  try {
+    const r = await driveLaporan();
+    (r.roots || []).forEach((root) => {
+      console.log(`\n${root.label} (${root.id})`);
+      console.log(`  File lepas di induk: ${root.lepas}`);
+      (root.folders || []).forEach((f) => console.log(`  - ${f.nama} (${f.jumlah} file)`));
+    });
+    console.log('');
+  } catch (e) { stop(e.message); }
+
+} else if (cmd === 'bersihkan-folder-yatim') {
+  if (!driveOn()) stop('GDRIVE_URL dan/atau GDRIVE_SECRET belum diisi di file .env.');
+  if (!args.includes('--confirm')) stop('Perintah ini membuang folder ke Sampah Drive. Tambahkan --confirm setelah perintah untuk melanjutkan.');
+  const kodes = db.prepare('select kode_ormas from ormas').all().map((r) => r.kode_ormas).filter(Boolean);
+  console.log(`\n${kodes.length} kode ormas aktif tidak akan disentuh.`);
+  try {
+    const r = await driveCleanFoldersYatim(kodes);
+    console.log(`SELESAI. ${r.dihapus || 0} folder yatim/uji dipindah ke Sampah Drive.`);
+    (r.nama || []).slice(0, 30).forEach((n) => console.log(`  - ${n}`));
+    if ((r.dihapus || 0) > 30) console.log(`  ... dan ${r.dihapus - 30} folder lainnya`);
+  } catch (e) { stop(e.message); }
 
 } else if (cmd === 'test-email') {
   const to = args[0];
@@ -107,7 +151,7 @@ if (cmd === 'admins') {
     console.log(`\nBERHASIL. Email uji dikirim ke ${to}. Periksa kotak masuk dan folder spam.\n`);
   } catch (e) {
     const hint = e.code === 'EAUTH' ? 'Username atau sandi salah. Untuk Gmail wajib memakai "Sandi aplikasi" (App Password) 16 karakter, tulis TANPA spasi, bukan password Gmail biasa.'
-      : ['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'ECONNREFUSED'].includes(e.code) ? 'Tidak bisa terhubung. Periksa internet/firewall/antivirus, dan coba SMTP_PORT=465 dengan SMTP_SECURE=true.'
+      : ['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'ECONNREFUSED'].includes(e.code) ? 'Port SMTP diblokir jaringan/firewall/antivirus (bukan salah password). Coba jaringan lain/hotspot. Bila tetap gagal, pakai relay yang membuka port 443, misalnya Brevo: SMTP_HOST=smtp-relay.brevo.com, SMTP_PORT=443, SMTP_SECURE=true, SMTP_USER/SMTP_PASS dari akun Brevo.'
       : 'Periksa kembali isi file .env.';
     stop(`${e.message}\n${hint}`);
   }

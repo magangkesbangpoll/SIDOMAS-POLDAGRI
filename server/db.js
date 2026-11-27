@@ -17,13 +17,13 @@ export const db = new Database(path.join(DATA_DIR, 'sidomas.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-export const PERMS = ['view_ormas', 'manage_ormas', 'view_docs', 'view_credentials', 'manage_credentials', 'export', 'export_credentials', 'view_logs', 'manage_admins', 'manage_settings'];
+export const PERMS = ['view_ormas', 'manage_ormas', 'view_docs', 'export', 'view_logs', 'manage_admins', 'manage_settings'];
 
 // Hak akses per role. Menu di dashboard admin mengikuti daftar ini (menu tanpa izin otomatis tidak tampil).
 //  - Super Admin                : semua menu dan hak akses
-//  - Admin Digitalisasi Ormas: tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan
-//  - Kepala Bidang Poldagri  : tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan
-const TANPA_KELOLA = ['manage_admins', 'export_credentials', 'manage_settings'];
+//  - Admin Digitalisasi Ormas: tanpa Manajemen Admin dan Pengaturan
+//  - Kepala Bidang Poldagri  : tanpa Manajemen Admin dan Pengaturan
+const TANPA_KELOLA = ['manage_admins', 'manage_settings'];
 export const ROLE_PERMS = {
   'Admin Digitalisasi Ormas': PERMS.filter((p) => !TANPA_KELOLA.includes(p)),
   'Kepala Bidang Poldagri': PERMS.filter((p) => !TANPA_KELOLA.includes(p)),
@@ -35,8 +35,7 @@ create table if not exists kategori(id integer primary key autoincrement, nama_k
 create table if not exists roles(id integer primary key autoincrement, nama_role text unique not null, permissions text not null);
 create table if not exists admin(id integer primary key autoincrement, nama text not null, username text unique not null, email text unique not null, password_hash text not null, role_id integer not null references roles(id), status_akun text not null default 'aktif', must_change integer not null default 0, last_login text, created_at text not null, updated_at text not null);
 create table if not exists ormas(id integer primary key autoincrement, kode_ormas text unique not null, nama_ormas text not null, logo_key text, kategori_id integer not null references kategori(id), nama_ketua text, nomor_whatsapp_ketua text, alamat text, email_ormas text, nomor_sk text, status_dokumen text not null default 'Belum Lengkap', status_operasional text not null default 'Aktif', status_publikasi text not null default 'Disembunyikan', catatan_verifikasi text, created_at text not null, updated_at text not null, created_by integer references admin(id), updated_by integer references admin(id));
-create table if not exists dokumen_ormas(id integer primary key autoincrement, ormas_id integer not null references ormas(id) on delete cascade, nama_file text not null, storage_key text unique not null, mime_type text not null, ukuran_file integer not null, uploaded_at text not null, uploaded_by integer references admin(id), status_dokumen text, klasifikasi_akses text not null default 'kredensial');
-create table if not exists kredensial_harian(id integer primary key autoincrement, ormas_id integer not null references ormas(id) on delete cascade, username text not null, password_hash text not null, password_enc text not null, tanggal_berlaku text not null, tanggal_kedaluwarsa text not null, created_at text not null, status text not null default 'aktif');
+create table if not exists dokumen_ormas(id integer primary key autoincrement, ormas_id integer not null references ormas(id) on delete cascade, nama_file text not null, storage_key text unique not null, mime_type text not null, ukuran_file integer not null, uploaded_at text not null, uploaded_by integer references admin(id), status_dokumen text, klasifikasi_akses text not null default 'publik');
 create table if not exists log_aktivitas(id integer primary key autoincrement, admin_id integer, nama_pengguna text, role text, jenis_aktivitas text not null, ormas_id integer, ringkasan text, waktu_aktivitas text not null, hasil text not null default 'berhasil');
 create table if not exists settings(key text primary key, value text not null);
 create table if not exists reset_tokens(id integer primary key autoincrement, admin_id integer not null references admin(id) on delete cascade, token_hash text unique not null, expires_at text not null, used integer not null default 0);
@@ -56,7 +55,6 @@ create index if not exists idx_ormas_nama on ormas(nama_ormas);
 create index if not exists idx_ormas_kat on ormas(kategori_id);
 create index if not exists idx_ormas_status on ormas(status_dokumen, status_operasional, status_publikasi);
 create index if not exists idx_dok_ormas on dokumen_ormas(ormas_id);
-create index if not exists idx_kred on kredensial_harian(ormas_id, tanggal_berlaku, status);
 create index if not exists idx_log_waktu on log_aktivitas(waktu_aktivitas);
 `);
 
@@ -154,7 +152,7 @@ if (!db.prepare("select 1 from roles where nama_role='Super Admin'").get()) db.p
 
 // ---- Migrasi role v2 (berjalan sekali pada database lama) ----
 // - Menambah role Super Admin (akses penuh).
-// - Mengurangi hak role Admin Digitalisasi Ormas: tanpa Manajemen Admin, Ekspor Kredensial, dan Pengaturan.
+// - Mengurangi hak role Admin Digitalisasi Ormas: tanpa Manajemen Admin dan Pengaturan.
 // - Agar tidak ada yang terkunci dari Manajemen Admin: jika setelah perubahan tidak ada akun aktif yang
 //   memegang hak manage_admins, akun aktif tertua dijadikan Super Admin.
 if (getSetting('roles_v2') !== 'done') {
@@ -169,6 +167,88 @@ if (getSetting('roles_v2') !== 'done') {
     }
     setSetting('roles_v2', 'done');
   })();
+}
+
+// ---- Batch 9: hapus Password Harian dan buka dokumen katalog tanpa kredensial ----
+if (getSetting('batch9_pw_harian_dihapus') !== 'done') {
+  db.transaction(() => {
+    const up = db.prepare('insert into roles(nama_role,permissions) values(?,?) on conflict(nama_role) do update set permissions=excluded.permissions');
+    for (const [nama, perms] of Object.entries(ROLE_PERMS)) up.run(nama, JSON.stringify(perms));
+    db.exec(`update dokumen_ormas set klasifikasi_akses='publik'; drop table if exists kredensial_harian;`);
+    setSetting('batch9_pw_harian_dihapus', 'done');
+  })();
+}
+
+// ---- Batch 10: tracking pendaftaran, revisi berbatas waktu, dan riwayat status ----
+const KOLOM_TRACKING = {
+  tracking_id: "tracking_id text",
+  akses_token_hash: "akses_token_hash text",
+  tracking_gagal: "tracking_gagal integer not null default 0",
+  tracking_locked_until: "tracking_locked_until text",
+  revisi_count: "revisi_count integer not null default 0",
+  tanggal_dikembalikan: "tanggal_dikembalikan text",
+  batas_revisi: "batas_revisi text",
+  izin_khusus: "izin_khusus integer not null default 0",
+  pengingat_3hari: "pengingat_3hari integer not null default 0",
+  otp_hash: "otp_hash text",
+  otp_expired: "otp_expired text",
+  otp_gagal: "otp_gagal integer not null default 0",
+};
+for (const [nama, ddl] of Object.entries(KOLOM_TRACKING)) {
+  if (!db.prepare("select 1 from pragma_table_info('pendaftaran_ormas') where name=?").get(nama)) {
+    db.exec(`alter table pendaftaran_ormas add column ${ddl}`);
+  }
+}
+db.exec(`
+  create unique index if not exists idx_pend_tracking on pendaftaran_ormas(tracking_id);
+  create table if not exists pendaftaran_riwayat(
+    id integer primary key autoincrement,
+    pendaftaran_id integer not null references pendaftaran_ormas(id) on delete cascade,
+    status text not null,
+    label text not null,
+    catatan text,
+    oleh text not null default 'sistem',
+    created_at text not null
+  );
+  create table if not exists pendaftaran_item(
+    id integer primary key autoincrement,
+    pendaftaran_id integer not null references pendaftaran_ormas(id) on delete cascade,
+    item_key text not null,
+    status text not null default 'pending',
+    catatan text,
+    updated_at text not null,
+    unique(pendaftaran_id, item_key)
+  );
+  create index if not exists idx_pend_riwayat on pendaftaran_riwayat(pendaftaran_id, id);
+  create index if not exists idx_pend_item on pendaftaran_item(pendaftaran_id, item_key);
+`);
+// Data lama yang sudah ada sebelum Batch 10 tetap mendapat Tracking ID (kode akses harus dibuat ulang admin).
+const KUNCI_ITEM = ['nama_ormas', 'kategori_nama', 'bentuk', 'bidang_kegiatan', 'kemantren', 'nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'telepon_ormas', 'email_ormas', 'alamat', 'legal_status', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'anggota_total', 'anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas', 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
+if (getSetting('batch10_tracking_revisi') !== 'done') {
+  db.transaction(() => {
+    const buat = () => `TRK-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(9).toString('base64url').toUpperCase()}`;
+    const lama = db.prepare('select * from pendaftaran_ormas').all();
+    const set = db.prepare('update pendaftaran_ormas set tracking_id=? where id=?');
+    const insItem = db.prepare("insert or ignore into pendaftaran_item(pendaftaran_id,item_key,status,catatan,updated_at) values(?,?,'pending',null,?)");
+    const insRiwayat = db.prepare('insert into pendaftaran_riwayat(pendaftaran_id,status,label,catatan,oleh,created_at) values(?,?,?,?,?,?)');
+    const t = new Date().toISOString();
+    for (const r of lama) {
+      if (!r.tracking_id) set.run(buat(), r.id);
+      let d = {};
+      try { d = JSON.parse(r.data || '{}'); } catch { /* data lama rusak tetap dibuat item kosong */ }
+      const dok = db.prepare('select jenis from pendaftaran_dokumen where pendaftaran_id=?').all(r.id).map((x) => `dok:${x.jenis}`);
+      const kunci = [...new Set(['nama_ormas', 'kategori_nama', ...KUNCI_ITEM.filter((k) => Object.prototype.hasOwnProperty.call(d, k)), ...dok])];
+      if (r.logo_key) kunci.push('logo');
+      for (const k of kunci) insItem.run(r.id, k, t);
+      insRiwayat.run(r.id, r.status || 'tindaklanjuti', 'Data pendaftaran lama', null, 'sistem', r.created_at || t);
+    }
+    setSetting('batch10_tracking_revisi', 'done');
+  })();
+}
+
+// Laporan tahunan: berkas ormas menunggu verifikasi di data/pending, baru dipindah ke Drive/local resmi setelah admin menyetujui.
+if (!db.prepare("select 1 from pragma_table_info('laporan_tahunan') where name='dokumentasi_pending'").get()) {
+  db.exec('alter table laporan_tahunan add column dokumentasi_pending integer not null default 0');
 }
 
 // (Pembersihan otomatis data "(DEMO SIMULASI)" sudah dihapus: tidak ada data yang dihapus saat server start.)

@@ -15,11 +15,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db, DATA_DIR, SECRET, PERMS, getSetting as S, setSetting } from './db.js';
-import { driveOn, driveUpload, driveDownload, driveDelete, driveOrganize, driveDeleteFolder } from './drive.js';
+import { driveOn, driveUpload, driveDownload, driveDelete, driveOrganize, driveEnsureFolder, driveDeleteFolder } from './drive.js';
 import { backupDb } from './backup.js';
-import { setupFitur, notify, withExpiry, expiryInfo, dokKedaluwarsa, sessionAktif, cekKedaluwarsa } from './fitur.js';
+import { setupFitur, notify, withExpiry, expiryInfo, dokKedaluwarsa, cekKedaluwarsa } from './fitur.js';
 import { setupBatch, normalizeLegal, maskPhone, legalStats, laporanStats, notifOrmas, cekPengingatOrmas, LEGAL_STATUS } from './batch.js';
 import { createHardening, passwordError, PW_MSG } from './hardening.js';
+import { setupTracking, cekTracking, terbitkanAkses, siapkanItemPendaftaran, catatRiwayat, statusLabel } from './tracking.js';
 
 try { dns.setDefaultResultOrder?.('ipv4first'); } catch {} // jaringan dengan IPv6 bermasalah tidak membuat koneksi ke Gmail/Drive macet
 
@@ -41,12 +42,13 @@ const now = () => new Date().toISOString();
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
 // Lima dokumen wajib + laporan kegiatan tahunan (opsional; kunci internal tetap 'dokumentasi')
 const DOC_TYPES = { sk_pengurusan: 'SK Pengurusan', surat_domisili: 'Surat Keterangan Domisili', program_kerja: 'Program Kerja', badan_hukum: 'Salinan Badan Hukum', skto: 'SKTO', dokumentasi: 'Laporan Kegiatan Tahunan', adart: 'AD/ART', company_profile: 'Company Profile' };
-// Dokumen opsional: laporan tahunan, AD/ART (terkunci seperti PDF lain), dan Company Profile (PDF/PPT/PPTX, TERBUKA untuk publik)
+// Dokumen opsional: laporan tahunan, AD/ART, dan Company Profile (PDF/PPT/PPTX)
 const OPT_DOCS = ['dokumentasi', 'adart', 'company_profile'];
 const REQ_DOCS = Object.keys(DOC_TYPES).filter((k) => !OPT_DOCS.includes(k));
 const PPT_MIME = ['application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
 const docMime = (jenis, nama) => (jenis !== 'company_profile' ? 'application/pdf' : /\.pptx$/i.test(nama) ? PPT_MIME[1] : /\.ppt$/i.test(nama) ? PPT_MIME[0] : 'application/pdf');
-const klas = (jenis) => (jenis === 'company_profile' ? 'publik' : 'kredensial');
+// Batch 9: tidak ada lagi PDF "terkunci"; semua dokumen ormas yang dipublikasikan terbuka di katalog.
+const klas = () => 'publik';
 const VALIDASI = ['Terdata', 'Terdaftar', 'Teregister'];
 const INT_FIELDS = ['anggota_perempuan', 'anggota_lansia', 'anggota_disabilitas', 'anggota_total'];
 const urlOk = (v) => { try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
@@ -65,33 +67,10 @@ const FILES = path.join(DATA_DIR, 'files');
 const LOGOS = path.join(DATA_DIR, 'logos');
 const PENDING = path.join(DATA_DIR, 'pending'); // berkas kiriman ormas yang menunggu verifikasi (belum ke katalog/Google Drive)
 
-// ---------- Kripto & kredensial harian ----------
-const ENC_KEY = crypto.createHash('sha256').update(SECRET + ':enc').digest();
-const enc = (t) => { const iv = crypto.randomBytes(12); const c = crypto.createCipheriv('aes-256-gcm', ENC_KEY, iv); const b = Buffer.concat([c.update(t, 'utf8'), c.final()]); return Buffer.concat([iv, c.getAuthTag(), b]).toString('base64'); };
-const dec = (s) => { const b = Buffer.from(s, 'base64'); const d = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, b.subarray(0, 12)); d.setAuthTag(b.subarray(12, 28)); return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8'); };
+// ---------- Generator akun portal ormas (autentikasi utama, BUKAN password harian) ----------
 const ALPHA = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const rnd = (n) => Array.from({ length: n }, () => ALPHA[crypto.randomInt(ALPHA.length)]).join('');
 const DUMMY_HASH = bcrypt.hashSync('dummy', 8);
-
-function makeCred(ormasId, t = today()) {
-  const username = 'u' + rnd(7).toLowerCase(), password = rnd(10);
-  db.transaction(() => {
-    db.prepare(`update kredensial_harian set status='diganti' where ormas_id=? and status='aktif'`).run(ormasId);
-    db.prepare(`insert into kredensial_harian(ormas_id,username,password_hash,password_enc,tanggal_berlaku,tanggal_kedaluwarsa,created_at,status) values(?,?,?,?,?,?,?,'aktif')`)
-      .run(ormasId, username, bcrypt.hashSync(password, 8), enc(password), t, new Date(`${t}T23:59:59+07:00`).toISOString(), now());
-  })();
-}
-// Lazy rotation + scheduler: kredensial hari ini dibuat otomatis untuk semua ormas
-function ensureAll() {
-  const t = today();
-  db.prepare(`update kredensial_harian set status='kedaluwarsa' where status='aktif' and tanggal_berlaku<?`).run(t);
-  for (const m of db.prepare(`select id from ormas where id not in (select ormas_id from kredensial_harian where tanggal_berlaku=? and status='aktif')`).all(t)) makeCred(m.id, t);
-}
-function ensureOne(id) {
-  const t = today();
-  db.prepare(`update kredensial_harian set status='kedaluwarsa' where status='aktif' and tanggal_berlaku<?`).run(t);
-  if (!db.prepare(`select 1 from kredensial_harian where ormas_id=? and tanggal_berlaku=? and status='aktif'`).get(id, t)) makeCred(id, t);
-}
 
 // ---------- Log ----------
 function log(req, jenis, ormasId, ringkasan, hasil = 'berhasil', who) {
@@ -139,7 +118,11 @@ const sniffImg = (p) => { const b = Buffer.alloc(4); const fd = fs.openSync(p, '
 const allUploaded = (req) => Object.values(req.files || {}).flat();
 const isDrive = (k) => String(k || '').startsWith('gd:'); // storage_key 'gd:<id>' = tersimpan di Google Drive
 const cleanup = (req) => allUploaded(req).forEach((f) => (isDrive(f.filename) ? driveDelete(f.filename.slice(3)) : fs.rm(f.path, { force: true }, () => {})));
-const fail = (req, res, msg, code = 400) => { cleanup(req); return res.status(code).json({ error: msg }); };
+const fail = (req, res, msg, code = 400) => {
+  cleanup(req);
+  if (req.driveFolder?.baru && req.driveFolder?.kode) driveDeleteFolder(req.driveFolder.kode); // folder baru dibatalkan ikut kosong
+  return res.status(code).json({ error: msg });
+};
 // Filter input: input yang mengandung pola XSS / SQL injection ditolak dan dicatat di Log Aktivitas (isi input TIDAK dicatat)
 const blocked = (req, res, hit) => {
   try { log(req, 'input_diblokir', null, `Input ditolak (${hit.why}) pada kolom "${hit.key}" - ${req.method} ${req.path}`, 'ditolak'); } catch {}
@@ -147,10 +130,21 @@ const blocked = (req, res, hit) => {
 };
 const unlink = (dir, key) => key && fs.rm(path.join(dir, path.basename(key)), { force: true }, () => {});
 const removeStored = (key, pending = false) => (isDrive(key) ? driveDelete(key.slice(3)) : unlink(pending ? PENDING : FILES, key));
+// Versi awaited: dipakai saat mengganti berkas agar file lama benar-benar hilang dari Drive sebelum respons dikirim.
+const hapusStored = async (key, pending = false) => {
+  if (!key) return;
+  if (isDrive(key)) await driveDelete(key.slice(3));
+  else fs.rmSync(path.join(pending ? PENDING : FILES, path.basename(key)), { force: true });
+};
 const logoCache = new Map(); // cache logo dari Google Drive agar halaman katalog tetap cepat
 const removeLogoFile = (key) => {
   if (!key) return;
   if (isDrive(key)) { logoCache.delete(key.slice(3)); driveDelete(key.slice(3)); } else unlink(LOGOS, key);
+};
+const hapusLogo = async (key) => {
+  if (!key) return;
+  if (isDrive(key)) { logoCache.delete(key.slice(3)); await driveDelete(key.slice(3)); }
+  else fs.rmSync(path.join(LOGOS, path.basename(key)), { force: true });
 };
 // Merapikan PDF + logo satu ormas ke folder Drive-nya ("Ormas-001 - Nama Ormas"). Berjalan di latar belakang setelah data tersimpan.
 function organizeOrmas(id) {
@@ -161,8 +155,47 @@ function organizeOrmas(id) {
   if (!ids.length) return;
   driveOrganize(o.kode_ormas, o.nama_ormas, ids).catch((e) => console.error(`Gagal merapikan folder Drive ${o.kode_ormas}:`, e.message));
 }
+const ensureOrmasFolder = async (kode, nama) => {
+  if (!driveOn()) return null;
+  const f = await driveEnsureFolder(kode, String(nama || '').trim() || 'Tanpa Nama');
+  // Apps Script mengembalikan satu id folder untuk pdf dan logo.
+  const id = f.folder || f.pdf;
+  return { folder: id, pdf: id, logo: id, nama: f.nama, baru: !!f.baru, kode };
+};
+// Middleware: pastikan folder ormas tersedia SEBELUM toDrive mengunggah berkas.
+const siapkanFolderOrmas = async (req, res, next) => {
+  if (!driveOn()) return next();
+  const id = req.portal?.ormas?.id || +req.params.id;
+  const kode = req.newKode || db.prepare('select kode_ormas from ormas where id=?').get(id)?.kode_ormas;
+  if (!kode) return next(); // handler berikutnya yang akan mengembalikan 404
+  const nama = String(req.body?.nama_ormas || '').trim() || req.portal?.ormas?.nama_ormas || db.prepare('select nama_ormas from ormas where kode_ormas=?').get(kode)?.nama_ormas || 'Tanpa Nama';
+  try { req.driveFolder = await ensureOrmasFolder(kode, nama); next(); }
+  catch (e) { cleanup(req); console.error('Gagal menyiapkan folder Drive:', e); return res.status(502).json({ error: `Gagal menyiapkan folder Drive ormas: ${e.message}` }); }
+};
+// Kode ormas dialokasikan lebih dulu supaya folder bisa dibuat sebelum berkas diunggah.
+const ambilKodeOrmas = (req, res, next) => {
+  const seq = db.transaction(() => { const n = +S('ormas_seq') + 1; setSetting('ormas_seq', n); return n; }).immediate();
+  req.newKode = 'Ormas-' + String(seq).padStart(3, '0');
+  next();
+};
 const sniffBuf = (b) => (b[0] === 0x89 ? 'image/png' : b[0] === 0xff ? 'image/jpeg' : 'image/webp');
 const cleanName = (n) => Buffer.from(n, 'latin1').toString('utf8').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 150);
+// Admin menyetujui laporan: pindahkan berkas dari data/pending ke Drive (atau folder resmi lokal jika Drive nonaktif).
+// Nama file di Drive menyertakan tahun laporan agar arsip mudah dibedakan.
+const promosiLaporan = async ({ key, nama, tahun, ormas }) => {
+  const src = path.join(PENDING, path.basename(String(key || '')));
+  if (!key || !fs.existsSync(src)) throw new Error('Berkas laporan tidak ditemukan di penyimpanan sementara');
+  const label = `Laporan Kegiatan Tahunan ${tahun} - ${cleanName(nama || 'laporan.pdf')}`;
+  if (driveOn()) {
+    const folder = await ensureOrmasFolder(ormas.kode_ormas, ormas.nama_ormas);
+    const gid = await driveUpload(src, label, { kind: 'pdf', mime: 'application/pdf', kode: ormas.kode_ormas, nama: ormas.nama_ormas, parent: folder.pdf });
+    fs.rmSync(src, { force: true });
+    return 'gd:' + gid;
+  }
+  const dst = path.join(FILES, path.basename(String(key)));
+  fs.renameSync(src, dst);
+  return key;
+};
 const makeUpload = (toPending) => (req, res, next) => {
   const m = multer({
     storage: multer.diskStorage({
@@ -187,19 +220,30 @@ const makeUpload = (toPending) => (req, res, next) => {
 const upload = makeUpload(false);
 const uploadPending = makeUpload(true); // dipakai portal ormas: berkas disimpan lokal dulu sampai admin memverifikasi
 
-// Jika Google Drive diaktifkan (GDRIVE_URL + GDRIVE_SECRET di .env), PDF dan logo dipindahkan dari folder sementara
-// ke folder Drive masing-masing. Jika validasi gagal, cleanup() ikut menghapus file di Drive.
+// Jika Google Drive diaktifkan (GDRIVE_URL + GDRIVE_SECRET di .env), PDF dan logo diunggah LANGSUNG
+// ke folder ormas yang sudah disiapkan (req.driveFolder). Jika validasi gagal, cleanup() ikut menghapus file di Drive.
 const toDrive = async (req, res, next) => {
   if (!driveOn()) return next();
   const files = allUploaded(req);
+  const folder = req.driveFolder; // sudah disiapkan middleware siapkanFolderOrmas
+  // Laporan tahunan: sertakan tahun dari filter pada nama file di Google Drive.
+  const tahunLaporan = /^\d{4}$/.test(String(req.params?.tahun || '')) ? String(req.params.tahun) : '';
   const results = await Promise.allSettled(files.map(async (f) => {
     const logo = f.fieldname === 'logo';
-    const id = await driveUpload(f.path, `${logo ? 'Logo' : DOC_TYPES[f.fieldname] || f.fieldname} - ${cleanName(f.originalname)}`, { kind: logo ? 'logo' : 'pdf', mime: logo ? f.mimetype : docMime(f.fieldname, f.originalname) });
+    const dasar = logo ? 'Logo' : f.fieldname === 'dokumentasi' ? 'Laporan Kegiatan Tahunan' : DOC_TYPES[f.fieldname] || f.fieldname;
+    const label = f.fieldname === 'dokumentasi' && tahunLaporan ? `${dasar} ${tahunLaporan}` : dasar;
+    const id = await driveUpload(f.path, `${label} - ${cleanName(f.originalname)}`, {
+      kind: logo ? 'logo' : 'pdf',
+      mime: logo ? f.mimetype : docMime(f.fieldname, f.originalname),
+      kode: folder?.kode,
+      nama: folder?.nama,
+      parent: logo ? folder?.logo : folder?.pdf,
+    });
     f.filename = 'gd:' + id;
     fs.rm(f.path, { force: true }, () => {});
   }));
   const bad = results.find((r) => r.status === 'rejected');
-  if (bad) { console.error('Gagal ke Google Drive:', bad.reason?.message); cleanup(req); return res.status(502).json({ error: `Berkas gagal disimpan ke Google Drive: ${bad.reason?.message}` }); }
+  if (bad) { console.error('Gagal ke Google Drive:', bad.reason?.message); cleanup(req); if (folder?.baru) driveDeleteFolder(folder.kode); return res.status(502).json({ error: `Berkas gagal disimpan ke Google Drive: ${bad.reason?.message}` }); }
   next();
 };
 
@@ -224,14 +268,14 @@ app.get('/api/live', (req, res) => {
   req.on('close', () => liveClients.delete(res));
 });
 setInterval(() => { for (const r of liveClients) r.write(': ping\n\n'); }, 25000).unref();
-setInterval(liveBroadcast, 60000).unref(); // perubahan berbasis waktu (kedaluwarsa, password harian)
+setInterval(liveBroadcast, 60000).unref(); // perubahan berbasis waktu (kedaluwarsa, status laporan)
 app.use('/api', (req, res, next) => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !/^\/(public|auth)\//.test(req.path)) res.on('finish', () => { if (res.statusCode < 400) liveBroadcast(); });
   next();
 });
 
 const limiter = (extra = {}) => rateLimit({ windowMs: 15 * 60 * 1000, limit: () => +S('login_max_attempts') || 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Terlalu banyak percobaan. Silakan coba lagi beberapa menit lagi.' }, ...extra });
-const loginLimiter = limiter(), accessLimiter = limiter(), forgotLimiter = limiter({ limit: 5 });
+const loginLimiter = limiter(), forgotLimiter = limiter({ limit: 5 });
 
 // ===== Publik =====
 app.get('/api/public/meta', (req, res) => {
@@ -273,7 +317,9 @@ app.get('/api/public/ormas/:kode', (req, res) => {
   const o = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,o.nama_ketua,o.sekretaris,o.bendahara,o.nomor_whatsapp_ketua,o.telepon_ormas,o.email_ormas,o.alamat,o.anggota_perempuan,o.anggota_lansia,o.anggota_disabilitas,o.anggota_total,o.link_dokumentasi,o.link_instagram,o.link_youtube,o.link_tiktok,o.cp_bagian,o.status_dokumen,o.updated_at,(o.logo_key is not null) as has_logo,k.nama_kategori from ormas o join kategori k on k.id=o.kategori_id where o.kode_ormas=? and o.status_publikasi='Publik'`).get(req.params.kode);
   if (!o || S('catalog_public') !== 'true') return res.status(404).json({ error: 'Data ormas tidak ditemukan' });
   o.nomor_whatsapp_ketua = maskPhone(o.nomor_whatsapp_ketua); // privasi: nomor pribadi ketua disamarkan di server (mis. 08********23); nomor telepon ormas tampil normal
-  o.docs = db.prepare(`select id,jenis_dokumen,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and klasifikasi_akses='kredensial' and jenis_dokumen is not null and pending=0 order by id`).all(o.id);
+  // Batch 10: hanya Company Profile yang dipublikasikan di katalog. PDF lain (SK, domisili, program kerja,
+  // badan hukum, SKTO, AD/ART, laporan) tetap tersimpan di Google Drive untuk keperluan verifikasi/admin,
+  // tetapi tidak dikirim ke halaman publik dan tidak bisa diunduh dari sini.
   o.company_profile = db.prepare(`select id,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and jenis_dokumen='company_profile' and pending=0 order by id desc limit 1`).get(o.id) || null;
   res.json(o);
 });
@@ -313,27 +359,12 @@ app.get('/api/logo/:kode', async (req, res) => {
   }
 });
 
-app.post('/api/public/ormas/:kode/access', accessLimiter, (req, res) => {
-  const o = db.prepare(`select id,kode_ormas,nama_ormas from ormas where kode_ormas=? and status_publikasi='Publik'`).get(req.params.kode);
-  const { username, password } = req.body || {};
-  let c = null;
-  if (o) { ensureOne(o.id); c = db.prepare(`select * from kredensial_harian where ormas_id=? and tanggal_berlaku=? and status='aktif'`).get(o.id, today()); }
-  const okPass = bcrypt.compareSync(String(password || '').slice(0, 100), c?.password_hash || DUMMY_HASH);
-  const ok = !!(c && okPass && String(username || '') === c.username && new Date(c.tanggal_kedaluwarsa) > new Date());
-  if (!ok) { log(req, 'akses_dokumen_publik', o?.id, `Akses ditolak untuk ${req.params.kode}`, 'gagal'); return res.status(401).json({ error: 'INVALID' }); }
-  const ttl = Math.max(1, Math.min(30 * 60, Math.floor((new Date(c.tanggal_kedaluwarsa).getTime() - Date.now()) / 1000))); // tidak melewati pergantian hari
-  // cid = id kredensial yang dipakai: sesi langsung tidak sah jika admin membuat ulang password harian
-  const token = jwt.sign({ k: o.kode_ormas, scope: 'doc', cid: c.id }, SECRET, { expiresIn: ttl });
-  const docs = db.prepare(`select id,nama_file,ukuran_file,uploaded_at from dokumen_ormas where ormas_id=? and klasifikasi_akses='kredensial' and pending=0 order by id`).all(o.id);
-  log(req, 'akses_dokumen_publik', o.id, `Akses dokumen ${o.kode_ormas} berhasil`);
-  res.json({ token, kode: o.kode_ormas, nama: o.nama_ormas, docs, expires_at: new Date(Date.now() + ttl * 1000).toISOString() });
-});
-
+// Batch 10: endpoint umum hanya untuk Company Profile. PDF lain tidak dipublikasikan,
+// meski tersimpan di Drive; URL dokumen lain tidak boleh bisa ditebak/ diakses publik.
 app.get('/api/public/files/:id', (req, res) => {
-  let p; try { p = jwt.verify(String(req.query.token || ''), SECRET); if (p.scope !== 'doc') throw 0; } catch { return res.status(401).json({ error: 'Akses kedaluwarsa, silakan masuk kembali' }); }
-  if (!sessionAktif(p)) return res.status(401).json({ error: 'SESI_HABIS' });
+  if (S('catalog_public') !== 'true') return res.status(404).json({ error: 'Katalog tidak tersedia' });
   const d = db.prepare(`select d.*,o.kode_ormas,o.status_publikasi from dokumen_ormas d join ormas o on o.id=d.ormas_id where d.id=?`).get(+req.params.id);
-  if (!d || d.kode_ormas !== p.k || d.klasifikasi_akses !== 'kredensial' || d.status_publikasi !== 'Publik' || d.pending) return res.status(404).json({ error: 'Dokumen tidak ditemukan' });
+  if (!d || d.status_publikasi !== 'Publik' || d.pending || d.jenis_dokumen !== 'company_profile') return res.status(404).json({ error: 'Dokumen tidak ditemukan' });
   sendPdf(req, res, d, req.query.dl === '1', 'akses_dokumen_publik');
 });
 
@@ -423,7 +454,7 @@ app.post('/api/auth/reset', forgotLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== Portal ormas: akun TETAP milik ormas (terpisah dari kredensial harian PDF) =====
+// ===== Portal ormas: akun TETAP milik ormas (autentikasi utama) =====
 const portalLimiter = limiter();
 const PORTAL_FIELDS = ['nama_ketua', 'sekretaris', 'bendahara', 'nomor_whatsapp_ketua', 'telepon_ormas', 'email_ormas', 'alamat', 'bentuk', 'bidang_kegiatan', 'kemantren', 'legal_status', 'legal_jenis', 'nomor_sk', 'legal_tahun', 'legal_berlaku_sd', 'skto_nomor', 'skto_tahun', 'skto_berlaku_sd', ...INT_FIELDS, 'link_dokumentasi', 'link_instagram', 'link_youtube', 'link_tiktok', 'cp_bagian'];
 const portalUser = (kode) => kode.toLowerCase().replace('-', '');
@@ -691,21 +722,19 @@ app.get('/api/admin/ormas/:id', auth('view_ormas'), (req, res) => {
   res.json(o);
 });
 
-app.post('/api/admin/ormas', auth('manage_ormas'), upload, toDrive, (req, res) => {
+app.post('/api/admin/ormas', auth('manage_ormas'), ambilKodeOrmas, upload, siapkanFolderOrmas, toDrive, (req, res) => {
   const b = req.body, logo = req.files?.logo?.[0], docs = uploadedDocs(req);
-  const err = validateOrmas(b); if (err) return fail(req, res, err);
+  const err = validateOrmas(b); if (err) { cleanup(req); return fail(req, res, err); }
   const missing = REQ_DOCS.filter((k) => !docs.some(([j]) => j === k)).map((k) => DOC_TYPES[k]);
-  if (missing.length) return fail(req, res, `Dokumen wajib belum diunggah: ${missing.join(', ')}`);
+  if (missing.length) { cleanup(req); return fail(req, res, `Dokumen wajib belum diunggah: ${missing.join(', ')}`); }
   const row = rowOf(b), cols = Object.keys(row);
   const r = db.transaction(() => {
-    const seq = +S('ormas_seq') + 1; setSetting('ormas_seq', seq); // atomik: tidak ada ID ganda
-    const kode = 'Ormas-' + String(seq).padStart(3, '0');
+    const kode = req.newKode; // sudah dialokasikan sebelum folder Drive dibuat
     const id = db.prepare(`insert into ormas(kode_ormas,logo_key,${cols.join(',')},created_at,updated_at,created_by,updated_by) values(?,?,${cols.map(() => '?').join(',')},?,?,?,?)`)
       .run(kode, logo?.filename || null, ...cols.map((c) => row[c]), now(), now(), req.admin.id, req.admin.id).lastInsertRowid;
     docs.forEach(([j, f]) => addDoc(id, j, f, req.admin.id));
     return { id, kode };
   }).immediate();
-  makeCred(r.id);
   organizeOrmas(r.id);
   log(req, 'tambah_ormas', r.id, `Menambah ${r.kode}: ${row.nama_ormas}`);
   notifAdmin(req, `Menambah ${r.kode}: ${row.nama_ormas}`, r.id);
@@ -713,12 +742,12 @@ app.post('/api/admin/ormas', auth('manage_ormas'), upload, toDrive, (req, res) =
   res.json({ ...r, portal });
 });
 
-app.put('/api/admin/ormas/:id', auth('manage_ormas'), upload, toDrive, (req, res) => {
+app.put('/api/admin/ormas/:id', auth('manage_ormas'), upload, siapkanFolderOrmas, toDrive, (req, res) => {
   const id = +req.params.id, b = req.body, logo = req.files?.logo?.[0], docs = uploadedDocs(req);
   const o = db.prepare('select * from ormas where id=?').get(id);
-  if (!o) return fail(req, res, 'Data tidak ditemukan', 404);
-  if (db.prepare('select 1 from perubahan_ormas where ormas_id=?').get(id)) return fail(req, res, 'Ormas ini punya perubahan yang menunggu verifikasi. Verifikasi atau tolak dulu sebelum mengedit.', 409);
-  const err = validateOrmas(b); if (err) return fail(req, res, err);
+  if (!o) { cleanup(req); return fail(req, res, 'Data tidak ditemukan', 404); }
+  if (db.prepare('select 1 from perubahan_ormas where ormas_id=?').get(id)) { cleanup(req); return fail(req, res, 'Ormas ini punya perubahan yang menunggu verifikasi. Verifikasi atau tolak dulu sebelum mengedit.', 409); }
+  const err = validateOrmas(b); if (err) { cleanup(req); return fail(req, res, err); }
   const replaced = db.prepare('select * from dokumen_ormas where ormas_id=? and pending=0').all(id).filter((d) => docs.some(([j]) => j === d.jenis_dokumen));
   const removeLogo = b.remove_logo === '1' || !!logo;
   const row = rowOf(b, o), cols = Object.keys(row);
@@ -760,19 +789,28 @@ const waNumber = (raw) => {
   return /^62\d{8,13}$/.test(n) ? n : null;
 };
 // Kirim WhatsApp lewat gateway (bawaan: Fonnte). Diatur di .env: WA_TOKEN (+ opsional WA_API_URL). Tanpa WA_TOKEN fitur ini nonaktif.
-// Dijalankan di latar belakang: kegagalan hanya dicatat di terminal dan TIDAK membatalkan pendaftaran.
-// Dibatasi (hardening.js): satu nomor hanya menerima satu pesan per 24 jam dan total per hari dibatasi (WA_DAILY_MAX, bawaan 100).
-const sendWA = async (to, message) => {
+// Notifikasi biasa: satu nomor satu pesan / 24 jam (hardening.js). OTP memakai jalur terpisah: 1 pesan / menit / nomor,
+// supaya kode OTP tidak tertahan oleh aturan 24 jam setelah pesan konfirmasi pendaftaran.
+const waOtpTerakhir = new Map();
+const sendWA = async (to, message, opts = {}) => {
   const token = process.env.WA_TOKEN, target = waNumber(to);
-  if (!token) return console.log('[WA] WA_TOKEN belum diisi, pesan WhatsApp tidak dikirim.');
-  if (!target) return console.log('[WA] Nomor tujuan tidak valid, pesan tidak dikirim.');
-  if (!hd.waAllow(target)) return console.log('[WA] Dilewati: nomor ini sudah menerima pesan dalam 24 jam terakhir atau batas harian tercapai.');
+  if (!token) { console.log('[WA] WA_TOKEN belum diisi, pesan WhatsApp tidak dikirim.'); return false; }
+  if (!target) { console.log('[WA] Nomor tujuan tidak valid, pesan tidak dikirim.'); return false; }
+  if (opts.otp) {
+    const t = Date.now(), terakhir = waOtpTerakhir.get(target) || 0;
+    if (t - terakhir < 60000) { console.log('[WA-OTP] Dilewati: OTP untuk nomor ini baru dikirim kurang dari 1 menit lalu.'); return false; }
+    waOtpTerakhir.set(target, t);
+  } else if (!hd.waAllow(target)) {
+    console.log('[WA] Dilewati: nomor ini sudah menerima pesan dalam 24 jam terakhir atau batas harian tercapai.');
+    return false;
+  }
   try {
     const r = await fetch(process.env.WA_API_URL || 'https://api.fonnte.com/send', { method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' }, body: JSON.stringify({ target, message }), signal: AbortSignal.timeout(10000) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || j.status === false) console.error('[WA] Gagal kirim:', r.status, j.reason || j.message || '');
-    else console.log('[WA] Terkirim ke', target.slice(0, 5) + '*****' + target.slice(-3));
-  } catch (e) { console.error('[WA] Gagal kirim:', e.message); }
+    if (!r.ok || j.status === false) { console.error('[WA] Gagal kirim:', r.status, j.reason || j.message || ''); return false; }
+    console.log('[WA] Terkirim ke', target.slice(0, 5) + '*****' + target.slice(-3));
+    return true;
+  } catch (e) { console.error('[WA] Gagal kirim:', e.message); return false; }
 };
 app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
   const kid = db.prepare('select id from kategori order by urutan,id').get()?.id;
@@ -788,27 +826,32 @@ app.post('/api/public/daftar', daftarLimiter, uploadPending, (req, res) => {
     : validateOrmas(b) || (!waNumber(b.nomor_whatsapp_ketua) ? 'Nomor WhatsApp ketua wajib diisi dengan benar (contoh: 081234567890)' : !String(b.nama_ketua || '').trim() ? 'Nama ketua wajib diisi' : !String(b.alamat || '').trim() ? 'Alamat wajib diisi' : null);
   if (err) return fail(req, res, err);
   const nama = String(b.nama_ormas).trim();
-  if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjut'`).get(nama, nama))
+  if (db.prepare(`select 1 from ormas where lower(nama_ormas)=lower(?) union select 1 from pendaftaran_ormas where lower(nama_ormas)=lower(?) and status='tindaklanjuti'`).get(nama, nama))
     return fail(req, res, 'Ormas dengan nama ini sudah terdaftar atau sedang diproses', 409);
   const { kategori_id, status_dokumen, status_operasional, status_publikasi, ...data } = rowOf(b, {});
   const t = now();
+  let akses;
   db.transaction(() => {
     const pid = db.prepare('insert into pendaftaran_ormas(nama_ormas,kategori_nama,data,logo_key,logo_nama,created_at,updated_at) values(?,?,?,?,?,?,?)')
       .run(nama, kat, JSON.stringify(data), logo?.filename || null, logo ? cleanName(logo.originalname) : null, t, t).lastInsertRowid;
     docs.forEach(([j, f]) => db.prepare('insert into pendaftaran_dokumen(pendaftaran_id,jenis,nama_file,storage_key,ukuran) values(?,?,?,?,?)').run(pid, j, cleanName(f.originalname), f.filename, f.size));
+    // Batch 10: ID acak. Verifikasi hanya memakai OTP yang dikirim ke email pendaftar.
+    akses = terbitkanAkses(pid);
+    siapkanItemPendaftaran(pid, { ...data, nama_ormas: nama, kategori_nama: kat }, docs.map(([j]) => j), logo?.filename || null);
+    catatRiwayat(pid, 'tindaklanjuti', 'Pendaftaran dikirim', null, 'ormas');
   })();
   (req.files?.skto || []).forEach((f) => fs.rm(f.path, { force: true }, () => {}));
   notify({ jenis: 'admin', judul: `Pendaftaran ormas baru: ${nama}`, pesan: 'Ada ormas baru yang mendaftar. TINDAK LANJUTI!' });
   liveBroadcast(); // rute /public tidak memicu sinyal otomatis
-  res.json({ ok: true });
-  sendWA(b.nomor_whatsapp_ketua, `Halo, ${nama}. Berkas Anda sudah kami terima. Selanjutnya akan kami tindak lanjuti. Mohon menunggu sampai konfirmasi dari kami. Terima kasih.`);
+  res.json({ ok: true, tracking_id: akses.tracking_id });
+  sendWA(b.nomor_whatsapp_ketua, `Halo, ${nama}. Berkas Anda sudah kami terima. Tracking ID: ${akses.tracking_id}. Simpan ID ini. Saat ingin mengecek status, buka menu Tracking Pendaftaran dan pilih Kirim OTP lewat email atau WhatsApp. Terima kasih.`);
 });
 
-const pendCount = () => db.prepare(`select count(*) c from pendaftaran_ormas where status='tindaklanjuti'`).get().c;
+const pendCount = () => db.prepare(`select count(*) c from pendaftaran_ormas where status in ('tindaklanjuti','hangus')`).get().c;
 app.get('/api/admin/pendaftaran/count', auth('view_ormas'), (req, res) => res.json({ count: pendCount() }));
 app.get('/api/admin/pendaftaran', auth('view_ormas'), (req, res) => {
-  const rows = db.prepare(`select * from pendaftaran_ormas where status in ('tindaklanjuti','ditolak') order by (status='tindaklanjuti') desc, id desc limit 100`).all();
-  res.json(rows.map((p) => ({ ...p, data: JSON.parse(p.data), has_logo: !!p.logo_key, docs: db.prepare('select id,jenis,nama_file,ukuran from pendaftaran_dokumen where pendaftaran_id=?').all(p.id) })));
+  const rows = db.prepare(`select * from pendaftaran_ormas where status in ('tindaklanjuti','dikembalikan','hangus','ditolak') order by (status='tindaklanjuti') desc, (status='hangus') desc, id desc limit 100`).all();
+  res.json(rows.map((p) => ({ ...p, data: JSON.parse(p.data), status_label: statusLabel(p), has_logo: !!p.logo_key, docs: db.prepare('select id,jenis,nama_file,ukuran from pendaftaran_dokumen where pendaftaran_id=?').all(p.id) })));
 });
 const sendPend = (res, file, mime) => {
   if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'Berkas tidak ditemukan' });
@@ -829,23 +872,50 @@ app.post('/api/admin/pendaftaran/:id/approve', auth('manage_ormas'), async (req,
   if (!p) return res.status(404).json({ error: 'Pendaftaran tidak ditemukan atau sudah diproses' });
   const kn = String(req.body?.kategori_nama || p.kategori_nama).trim().replace(/\s+/g, ' ').slice(0, 100);
   if (!kn) return res.status(400).json({ error: 'Kategori wajib diisi' });
+  // Tombol "Setujui pendaftaran ormas" hanya muncul bila semua item ditandai terverifikasi.
+  // Simpan penandaan item itu dulu, lalu tolak approve bila masih ada item yang belum terverifikasi.
+  const masuk = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (masuk.length) {
+    const valid = new Set(db.prepare('select item_key from pendaftaran_item where pendaftaran_id=?').all(p.id).map((x) => x.item_key));
+    const t = now();
+    db.transaction(() => {
+      for (const it of masuk) {
+        if (!valid.has(it?.key)) continue;
+        const st = ['terverifikasi', 'revisi', 'pending'].includes(it.status) ? it.status : 'pending';
+        db.prepare('update pendaftaran_item set status=?,catatan=?,updated_at=? where pendaftaran_id=? and item_key=?')
+          .run(st, st === 'revisi' ? String(it.catatan || '').trim().slice(0, 900) : null, t, p.id, it.key);
+      }
+    })();
+  }
+  const belum = db.prepare("select count(*) c from pendaftaran_item where pendaftaran_id=? and status<>'terverifikasi'").get(p.id).c;
+  if (belum) return res.status(400).json({ error: `Masih ada ${belum} item yang belum terverifikasi. Periksa semua item dan tandai Terverifikasi (terkunci) sebelum menyetujui.` });
   const pdocs = db.prepare('select * from pendaftaran_dokumen where pendaftaran_id=?').all(p.id);
+  // Kode dan folder ormas dibuat LEBIH DULU, sebelum berkas diunggah ke Drive.
+  const seq = db.transaction(() => { const n = +S('ormas_seq') + 1; setSetting('ormas_seq', n); return n; }).immediate();
+  const kode = 'Ormas-' + String(seq).padStart(3, '0');
+  let folder = null;
+  try { folder = await ensureOrmasFolder(kode, p.nama_ormas); }
+  catch (e) { console.error('Gagal membuat folder Drive ormas:', e); return res.status(502).json({ error: `Gagal membuat folder Drive ormas: ${e.message}` }); }
   const uploaded = [], moved = [], keys = new Map(); let logoKey = null;
-  const undo = () => { uploaded.forEach((g) => driveDelete(g)); moved.forEach(([dst, src]) => { try { fs.renameSync(dst, src); } catch {} }); };
+  const undo = () => {
+    uploaded.forEach((g) => driveDelete(g));
+    moved.forEach(([dst, src]) => { try { fs.renameSync(dst, src); } catch {} });
+    if (folder?.baru) driveDeleteFolder(kode); // hanya buang folder yang memang baru dibuat dan sekarang kosong
+  };
   try {
     for (const d of pdocs) {
       const src = path.join(PENDING, path.basename(d.storage_key));
       if (!fs.existsSync(src)) throw new Error(`Berkas "${d.nama_file}" tidak ditemukan di penyimpanan sementara`);
-      if (driveOn()) { const g = await driveUpload(src, `${DOC_TYPES[d.jenis] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: docMime(d.jenis, d.nama_file) }); uploaded.push(g); keys.set(d.id, 'gd:' + g); }
+      if (driveOn()) { const g = await driveUpload(src, `${DOC_TYPES[d.jenis] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: docMime(d.jenis, d.nama_file), kode, nama: p.nama_ormas, parent: folder?.pdf }); uploaded.push(g); keys.set(d.id, 'gd:' + g); }
       else { const dst = path.join(FILES, path.basename(d.storage_key)); fs.renameSync(src, dst); moved.push([dst, src]); keys.set(d.id, d.storage_key); }
     }
     if (p.logo_key) {
       const src = path.join(PENDING, path.basename(p.logo_key));
       if (!fs.existsSync(src)) throw new Error('Logo tidak ditemukan di penyimpanan sementara');
-      if (driveOn()) { const g = await driveUpload(src, `Logo - ${p.logo_nama || 'logo'}`, { kind: 'logo', mime: sniffImg(src) }); uploaded.push(g); logoKey = 'gd:' + g; }
+      if (driveOn()) { const g = await driveUpload(src, `Logo - ${p.logo_nama || 'logo'}`, { kind: 'logo', mime: sniffImg(src), kode, nama: p.nama_ormas, parent: folder?.logo }); uploaded.push(g); logoKey = 'gd:' + g; }
       else { const dst = path.join(LOGOS, path.basename(p.logo_key)); fs.renameSync(src, dst); moved.push([dst, src]); logoKey = p.logo_key; }
     }
-  } catch (e) { undo(); console.error('Gagal memproses berkas pendaftaran:', e.message); return res.status(502).json({ error: `Berkas gagal dipindahkan: ${e.message}` }); }
+  } catch (e) { undo(); console.error('Gagal memproses berkas pendaftaran:', e.message); return res.status(502).json({ error: `Berkas gagal diunggah: ${e.message}` }); }
   let r;
   try {
     r = db.transaction(() => {
@@ -855,24 +925,23 @@ app.post('/api/admin/pendaftaran/:id/approve', auth('manage_ormas'), async (req,
       row.status_publikasi = 'Publik'; // tampil di katalog setelah disetujui
       row.status_dokumen = pdocs.filter((d) => REQ_DOCS.includes(d.jenis)).length >= REQ_DOCS.length ? 'Lengkap' : 'Belum Lengkap';
       const cols = Object.keys(row);
-      const seq = +S('ormas_seq') + 1; setSetting('ormas_seq', seq);
-      const kode = 'Ormas-' + String(seq).padStart(3, '0');
       const id = db.prepare(`insert into ormas(kode_ormas,logo_key,${cols.join(',')},created_at,updated_at,created_by,updated_by) values(?,?,${cols.map(() => '?').join(',')},?,?,?,?)`)
         .run(kode, logoKey, ...cols.map((c) => row[c]), now(), now(), req.admin.id, req.admin.id).lastInsertRowid;
       pdocs.forEach((d) => db.prepare('insert into dokumen_ormas(ormas_id,jenis_dokumen,nama_file,storage_key,mime_type,ukuran_file,uploaded_at,uploaded_by,klasifikasi_akses,pending) values(?,?,?,?,?,?,?,?,?,0)')
         .run(id, d.jenis, d.nama_file, keys.get(d.id), docMime(d.jenis, d.nama_file), d.ukuran, now(), req.admin.id, klas(d.jenis)));
       db.prepare(`update pendaftaran_ormas set status='disetujui',ormas_id=?,kategori_nama=?,updated_at=? where id=?`).run(id, kn, now(), p.id);
+      db.prepare("update pendaftaran_item set status='terverifikasi',catatan=null,updated_at=? where pendaftaran_id=?").run(now(), p.id);
+      catatRiwayat(p.id, 'disetujui', 'Pendaftaran disetujui', null, 'admin');
       return { id, kode };
     }).immediate();
   } catch (e) { undo(); console.error('Gagal menyetujui pendaftaran:', e.message); return res.status(500).json({ error: 'Pendaftaran gagal disetujui. Tidak ada data yang berubah.' }); }
   if (driveOn()) { pdocs.forEach((d) => unlink(PENDING, d.storage_key)); unlink(PENDING, p.logo_key); }
-  makeCred(r.id);
-  organizeOrmas(r.id); // membuat folder "Ormas-XXX - Nama" di Drive dan memindahkan PDF + logo ke dalamnya
+  organizeOrmas(r.id); // jaring pengaman: rapikan berkas lama yang masih ada di folder induk Drive
   const portal = newPortalAccount(r.id, r.kode); // ditampilkan sekali kepada admin untuk diberikan ke ormas
   log(req, 'setujui_pendaftaran', r.id, `Menyetujui pendaftaran ${r.kode}: ${p.nama_ormas}`);
   notifAdmin(req, `Menyetujui pendaftaran ormas baru ${r.kode} (${p.nama_ormas})`, r.id);
-  notifOrmas(r.id, { kategori: 'Information', jenis: 'selamat_datang', judul: 'Selamat datang di SIDOMAS', pesan: 'Pendaftaran ormas Anda sudah disetujui. Lengkapi data dan dokumen lewat menu Data Ormas, lalu susun Laporan Kegiatan Tahunan lewat menu Laporan Tahunan.' });
-  res.json({ ...r, portal });
+  notifOrmas(r.id, { kategori: 'Information', jenis: 'selamat_datang', judul: 'Selamat datang di SIDOMAS', pesan: 'Pendaftaran ormas Anda sudah disetujui. Lengkapi data dan dokumen lewat menu Data Ormas, lalu unggah PDF Laporan Kegiatan Tahunan lewat menu Laporan Tahunan.' });
+  res.json({ ...r, portal, tracking_id: p.tracking_id });
 });
 
 app.post('/api/admin/pendaftaran/:id/reject', auth('manage_ormas'), (req, res) => {
@@ -880,9 +949,11 @@ app.post('/api/admin/pendaftaran/:id/reject', auth('manage_ormas'), (req, res) =
   if (!p) return res.status(404).json({ error: 'Pendaftaran tidak ditemukan atau sudah diproses' });
   db.prepare('select storage_key from pendaftaran_dokumen where pendaftaran_id=?').all(p.id).forEach((d) => unlink(PENDING, d.storage_key));
   unlink(PENDING, p.logo_key);
+  const alasan = String(req.body?.catatan || '').trim().slice(0, 500);
   db.transaction(() => {
     db.prepare('delete from pendaftaran_dokumen where pendaftaran_id=?').run(p.id);
-    db.prepare(`update pendaftaran_ormas set status='ditolak',logo_key=null,catatan=?,updated_at=? where id=?`).run(String(req.body?.catatan || '').trim().slice(0, 500), now(), p.id);
+    db.prepare(`update pendaftaran_ormas set status='ditolak',logo_key=null,catatan=?,updated_at=? where id=?`).run(alasan, now(), p.id);
+    catatRiwayat(p.id, 'ditolak', 'Pendaftaran ditolak', alasan || null, 'admin');
   })();
   log(req, 'tolak_pendaftaran', null, `Menolak pendaftaran ormas baru: ${p.nama_ormas}`);
   res.json({ ok: true });
@@ -896,6 +967,10 @@ app.post('/api/admin/ormas/:id/verify', auth('manage_ormas'), async (req, res) =
   const pd = pendingOf(id);
   if (!pd) return res.status(400).json({ error: 'Tidak ada perubahan yang menunggu verifikasi' });
   const pdocs = db.prepare('select * from dokumen_ormas where ormas_id=? and pending=1').all(id);
+  // Folder ormas dipastikan ada dulu; berkas baru langsung masuk ke folder milik ormas ini.
+  let folder = null;
+  try { folder = await ensureOrmasFolder(o.kode_ormas, o.nama_ormas); }
+  catch (e) { console.error('Gagal menyiapkan folder Drive ormas:', e); return res.status(502).json({ error: `Gagal menyiapkan folder Drive ormas: ${e.message}` }); }
   const uploaded = []; // id file Drive yang sudah dibuat, dibatalkan jika ada yang gagal
   const moved = [];    // berkas lokal yang sudah dipindah ke folder resmi, dikembalikan jika gagal
   const newKey = new Map();
@@ -904,13 +979,13 @@ app.post('/api/admin/ormas/:id/verify', auth('manage_ormas'), async (req, res) =
     for (const d of pdocs) {
       const src = path.join(PENDING, path.basename(d.storage_key));
       if (!fs.existsSync(src)) throw new Error(`Berkas "${d.nama_file}" tidak ditemukan di penyimpanan sementara`);
-      if (driveOn()) { const gid = await driveUpload(src, `${DOC_TYPES[d.jenis_dokumen] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: docMime(d.jenis_dokumen, d.nama_file) }); uploaded.push(gid); newKey.set(d.id, 'gd:' + gid); }
+      if (driveOn()) { const gid = await driveUpload(src, `${DOC_TYPES[d.jenis_dokumen] || 'Dokumen'} - ${d.nama_file}`, { kind: 'pdf', mime: docMime(d.jenis_dokumen, d.nama_file), kode: o.kode_ormas, nama: o.nama_ormas, parent: folder?.pdf }); uploaded.push(gid); newKey.set(d.id, 'gd:' + gid); }
       else { const dst = path.join(FILES, path.basename(d.storage_key)); fs.renameSync(src, dst); moved.push([dst, src]); newKey.set(d.id, d.storage_key); }
     }
     if (pd.logo_key) {
       const src = path.join(PENDING, path.basename(pd.logo_key));
       if (!fs.existsSync(src)) throw new Error('Logo baru tidak ditemukan di penyimpanan sementara');
-      if (driveOn()) { const gid = await driveUpload(src, `Logo - ${pd.logo_nama || 'logo'}`, { kind: 'logo', mime: sniffImg(src) }); uploaded.push(gid); logoNewKey = 'gd:' + gid; }
+      if (driveOn()) { const gid = await driveUpload(src, `Logo - ${pd.logo_nama || 'logo'}`, { kind: 'logo', mime: sniffImg(src), kode: o.kode_ormas, nama: o.nama_ormas, parent: folder?.logo }); uploaded.push(gid); logoNewKey = 'gd:' + gid; }
       else { const dst = path.join(LOGOS, path.basename(pd.logo_key)); fs.renameSync(src, dst); moved.push([dst, src]); logoNewKey = pd.logo_key; }
     }
   } catch (e) {
@@ -941,11 +1016,14 @@ app.post('/api/admin/ormas/:id/verify', auth('manage_ormas'), async (req, res) =
     console.error('Gagal menyimpan verifikasi:', e.message);
     return res.status(500).json({ error: 'Perubahan gagal disimpan. Data lama tidak berubah.' });
   }
-  oldDocs.forEach((d) => removeStored(d.storage_key));
+  // Data katalog sudah berisi yang baru. Sekarang berkas lama di Drive dihapus dan ditunggu sampai selesai.
+  await Promise.all([
+    ...oldDocs.map((d) => hapusStored(d.storage_key)),
+    ...((logoNewKey || pd.remove_logo) && o.logo_key ? [hapusLogo(o.logo_key)] : []),
+  ]);
   if (driveOn()) { pdocs.forEach((d) => unlink(PENDING, d.storage_key)); if (pd.logo_key) unlink(PENDING, pd.logo_key); }
-  if ((logoNewKey || pd.remove_logo) && o.logo_key) removeLogoFile(o.logo_key);
   organizeOrmas(id);
-  log(req, 'verifikasi_perubahan', id, `Memverifikasi perubahan dari ormas ${o.kode_ormas}`);
+  log(req, 'verifikasi_perubahan', id, `Memverifikasi perubahan ${o.kode_ormas}: ${pdocs.length} berkas baru, ${oldDocs.length} berkas lama dihapus dari Drive`);
   notifAdmin(req, `Memverifikasi perubahan dari ${o.kode_ormas} (${o.nama_ormas})`, id);
   notifOrmas(id, { kategori: 'Information', jenis: 'verifikasi', judul: 'Perubahan data diverifikasi', pesan: 'Perubahan data dan dokumen yang Anda ajukan sudah diverifikasi admin dan diterapkan ke katalog.' });
   res.json({ ok: true });
@@ -976,11 +1054,11 @@ app.delete('/api/admin/ormas/:id', auth('manage_ormas'), (req, res) => {
   const o = db.prepare('select * from ormas where id=?').get(+req.params.id);
   if (!o) return res.status(404).json({ error: 'Data tidak ditemukan' });
   const docs = db.prepare('select storage_key,pending from dokumen_ormas where ormas_id=?').all(o.id);
-  const laps = db.prepare('select dokumentasi_key k from laporan_tahunan where ormas_id=?').all(o.id);
+  const laps = db.prepare('select dokumentasi_key k,dokumentasi_pending p from laporan_tahunan where ormas_id=?').all(o.id);
   const pl = db.prepare('select logo_key from perubahan_ormas where ormas_id=?').get(o.id);
   db.prepare('delete from ormas where id=?').run(o.id);
   docs.forEach((d) => removeStored(d.storage_key, !!d.pending)); removeLogoFile(o.logo_key);
-  laps.forEach((l) => l.k && removeStored(l.k)); // dokumentasi laporan tahunan ikut dihapus
+  laps.forEach((l) => l.k && removeStored(l.k, !!l.p)); // dokumentasi laporan tahunan ikut dihapus (pending/local/Drive)
   if (pl?.logo_key) unlink(PENDING, pl.logo_key);
   if (driveOn()) driveDeleteFolder(o.kode_ormas); // folder ormas ikut dibuang ke Sampah Drive
   log(req, 'hapus_ormas', null, `Menghapus ${o.kode_ormas}: ${o.nama_ormas}`);
@@ -994,35 +1072,13 @@ app.get('/api/admin/files/:id', auth('view_docs'), (req, res) => {
   sendPdf(req, res, d, req.query.dl === '1', 'akses_dokumen_admin');
 });
 
-// --- Password harian ---
-app.get('/api/admin/credentials', auth('view_credentials'), (req, res) => {
-  ensureAll();
-  const rows = db.prepare(`select o.id,o.kode_ormas,o.nama_ormas,k.nama_kategori,c.username,c.tanggal_berlaku,c.tanggal_kedaluwarsa,c.created_at,c.status from ormas o join kategori k on k.id=o.kategori_id left join kredensial_harian c on c.ormas_id=o.id and c.tanggal_berlaku=? and c.status='aktif' order by o.id`).all(today());
-  res.json({ server_time: now(), items: rows.map((r) => ({ ...r, status: r.status === 'aktif' && new Date(r.tanggal_kedaluwarsa) > new Date() ? 'aktif' : 'kedaluwarsa' })) });
-});
-const todayCred = (id) => { ensureOne(id); return db.prepare(`select * from kredensial_harian where ormas_id=? and tanggal_berlaku=? and status='aktif'`).get(id, today()); };
-app.get('/api/admin/credentials/:id/reveal', auth('manage_credentials'), (req, res) => {
-  const c = todayCred(+req.params.id); if (!c) return res.status(404).json({ error: 'Kredensial tidak ditemukan' });
-  log(req, 'lihat_kredensial', c.ormas_id, 'Menampilkan password harian');
-  res.json({ username: c.username, password: dec(c.password_enc) });
-});
-app.post('/api/admin/credentials/:id/regenerate', auth('manage_credentials'), (req, res) => {
-  const id = +req.params.id; if (!db.prepare('select 1 from ormas where id=?').get(id)) return res.status(404).json({ error: 'Data tidak ditemukan' });
-  makeCred(id); const c = todayCred(id); // kredensial lama berstatus 'diganti', sehingga sesi PDF ormas yang sedang terbuka langsung tidak sah
-  log(req, 'regenerasi_kredensial', id, 'Regenerasi kredensial harian');
-  const oo = db.prepare('select kode_ormas,nama_ormas from ormas where id=?').get(id);
-  notifAdmin(req, `Membuat ulang password harian ${oo.kode_ormas} (${oo.nama_ormas}). Sesi PDF ormas yang sedang terbuka ditutup.`, id);
-  res.json({ username: c.username, password: dec(c.password_enc) });
-});
-
 // --- Ekspor ---
 const sendXlsx = async (res, name, header, rows) => {
   try {
-    const kred = name.startsWith('kredensial');
-    const title = kred ? 'DAFTAR KREDENSIAL HARIAN ORMAS' : 'DATA ORGANISASI KEMASYARAKATAN (ORMAS)';
+    const title = 'DATA ORGANISASI KEMASYARAKATAN (ORMAS)';
     const cols = header.length + 1, A = (n) => ({ style: 'thin', color: { argb: 'FF94A3B8' } });
     const wb = new ExcelJS.Workbook(); wb.creator = 'SIDOMAS';
-    const ws = wb.addWorksheet(kred ? 'Kredensial' : 'Data Ormas', {
+    const ws = wb.addWorksheet('Data Ormas', {
       views: [{ state: 'frozen', ySplit: 4 }],
       pageSetup: { paperSize: header.length > 12 ? 8 : 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, printTitlesRow: '4:4', margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
       headerFooter: { oddFooter: '&LSIDOMAS - Bidang Poldagri&CHalaman &P dari &N&RDicetak &D' },
@@ -1053,14 +1109,6 @@ app.get('/api/admin/export/ormas', auth('export'), (req, res) => {
     ['ID Ormas', 'Nama Ormas', 'Bidang (Kategori)', 'Bentuk', 'Bidang Kegiatan', 'Kemantren', 'Alamat Kantor/Sekretariat', 'Nomor Telepon Ketua', 'Nomor Telepon Ormas', 'Email Ormas', 'Ketua', 'Sekretaris', 'Bendahara', 'Memiliki Legal Standing', 'Legal Standing - Jenis', 'Legal Standing - Nomor', 'Legal Standing - Tahun', 'Legal Standing - Berlaku s/d', 'SKTO - Nomor', 'SKTO - Tahun', 'SKTO - Berlaku s/d', 'Status Validasi', 'Jumlah Anggota', 'Anggota Perempuan', 'Anggota Lansia', 'Anggota Disabilitas', 'Link Dokumentasi', 'Instagram', 'Status Dokumen', 'Status Operasional', 'Status Publikasi', 'Dokumen Wajib Terunggah (dari 5)', 'Tanggal Dibuat', 'Tanggal Diperbarui'],
     items.map((o) => [o.kode_ormas, o.nama_ormas, o.nama_kategori, o.bentuk, o.bidang_kegiatan, o.kemantren, o.alamat, o.nomor_whatsapp_ketua, o.telepon_ormas, o.email_ormas, o.nama_ketua, o.sekretaris, o.bendahara, legalLabel(o.legal_status), o.legal_jenis, o.nomor_sk, o.legal_tahun, o.legal_berlaku_sd, o.skto_nomor, o.skto_tahun, o.skto_berlaku_sd, o.validasi, o.anggota_total, o.anggota_perempuan, o.anggota_lansia, o.anggota_disabilitas, o.link_dokumentasi, o.link_instagram, o.status_dokumen, o.status_operasional, o.status_publikasi, o.jumlah_dok, o.created_at, o.updated_at]));
 });
-app.get('/api/admin/export/credentials', auth('export_credentials'), (req, res) => {
-  if (req.query.confirm !== 'yes') return res.status(400).json({ error: 'Konfirmasi diperlukan' });
-  ensureAll();
-  const rows = db.prepare(`select o.kode_ormas,o.nama_ormas,c.* from ormas o join kredensial_harian c on c.ormas_id=o.id and c.tanggal_berlaku=? and c.status='aktif' order by o.id`).all(today());
-  log(req, 'ekspor_kredensial', null, `Ekspor ${rows.length} kredensial harian`);
-  sendXlsx(res, `kredensial-ormas-${today()}.xlsx`, ['ID Ormas', 'Nama Ormas', 'Username', 'Password', 'Berlaku', 'Kedaluwarsa'], rows.map((r) => [r.kode_ormas, r.nama_ormas, r.username, dec(r.password_enc), r.tanggal_berlaku, r.tanggal_kedaluwarsa]));
-});
-
 // --- Log ---
 app.get('/api/admin/logs', auth('view_logs'), (req, res) => {
   const page = Math.max(1, +req.query.page || 1), size = 25, t = `%${req.query.q || ''}%`;
@@ -1179,7 +1227,9 @@ app.put('/api/admin/categories', auth('manage_settings'), (req, res) => {
 // --- Fitur tambahan: notifikasi admin, notifikasi HP, dokumen kedaluwarsa, cek sesi PDF ---
 setupFitur({ app, auth });
 // --- Revisi Batch 4-7: dashboard ormas, laporan kegiatan tahunan, pengumuman (lihat batch.js) ---
-setupBatch({ app, auth, portalAuth, upload, toDrive, fail, removeStored, sendPdf, cleanName, organizeOrmas, log, notifAdmin });
+setupBatch({ app, auth, portalAuth, upload, uploadPending, toDrive, siapkanFolderOrmas, promosiLaporan, fail, removeStored, sendPdf, cleanName, organizeOrmas, log, notifAdmin });
+// --- Batch 10: tracking pendaftaran, verifikasi kode akses, revisi 30 hari (lihat tracking.js) ---
+setupTracking({ app, limiter, auth, uploadPending, cleanName, log, liveBroadcast, sendWA, sendMail: (to, subject, text) => sendMail(to, subject, text).then(() => true).catch((e) => { console.error('[EMAIL] Gagal mengirim notifikasi tracking:', e.message); return false; }) });
 
 // ---------- Static & error ----------
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan' }));
@@ -1197,11 +1247,11 @@ if (driveOn()) {
   setTimeout(jalankanBackup, 90 * 1000); // sekali setelah server hidup, lalu dicek tiap 6 jam (maksimal 1 backup per 20 jam)
   setInterval(jalankanBackup, 6 * 3600 * 1000);
 }
-ensureAll();
-setInterval(ensureAll, 60 * 60 * 1000); // scheduler; lazy rotation tetap berlaku sebagai cadangan
 hd.purge(); setInterval(() => hd.purge(), 3600 * 1000).unref(); // bersihkan catatan token dicabut dan batas WhatsApp yang sudah lewat
 setTimeout(cekKedaluwarsa, 20 * 1000); // pengingat SKTO / legal standing yang hampir atau sudah kedaluwarsa
 setInterval(cekKedaluwarsa, 6 * 3600 * 1000);
 setTimeout(cekPengingatOrmas, 40 * 1000); // pengingat untuk dashboard ormas: dokumen, Legal Standing, laporan tahunan
 setInterval(cekPengingatOrmas, 6 * 3600 * 1000);
-app.listen(PORT, () => console.log(`SIDOMAS server berjalan di http://localhost:${PORT} [versi: v3 batch 4-7 legal-standing + kontak + dashboard-ormas + laporan-tahunan]`));
+setTimeout(cekTracking, 50 * 1000); // Batch 10: tutup revisi yang habis + pengingat 3 hari sebelum batas
+setInterval(cekTracking, 60 * 60 * 1000);
+app.listen(PORT, () => console.log(`SIDOMAS server berjalan di http://localhost:${PORT} [versi: v6 batch 4-10 legal-standing + kontak + dashboard-ormas + laporan-tahunan + katalog-publik + tracking-otp-email-wa]`));

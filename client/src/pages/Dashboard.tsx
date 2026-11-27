@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowRight, ArrowUpRight, BadgeCheck, Building2, CalendarClock, CalendarX2, Download, FileWarning, Plus, ShieldQuestion, UserPlus } from 'lucide-react';
-import { CountUp } from '../fx';
-import { Badge, Empty, ErrorBox, STATUS_COLOR, fmtDate, tglIndo, useFetch } from '../ui';
+import { ArrowRight, ArrowUpRight, BadgeCheck, Building2, CalendarClock, CalendarX2, ClipboardList, Download, FileWarning, Plus, ShieldCheck, ShieldQuestion, UserPlus } from 'lucide-react';
+import { CountUp, LiveClock } from '../fx';
+import { Badge, Empty, ErrorBox, LegalBadge, STATUS_COLOR, fmtDate, tglIndo, useFetch } from '../ui';
 import { useAuth } from './Admin';
 
 const WIB = 'Asia/Jakarta';
@@ -15,9 +15,9 @@ const Tip = ({ active, payload }: any) => !active || !payload?.length ? null : (
 
 function Stat({ label, value, icon: Icon, to, tone = 'text-gold', delay }: any) {
   return (
-    <Link to={to} className="card card-lift group relative flex min-h-[8.5rem] flex-col justify-between overflow-hidden p-4" style={{ animationDelay: `${delay}ms` }}>
-      <span aria-hidden="true" className={`pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-current opacity-[.09] blur-2xl ${tone}`} />
-      <div className="flex items-start justify-between gap-2"><Icon size={18} strokeWidth={1.7} className={tone} /><ArrowUpRight size={15} className="text-muted opacity-0 transition group-hover:opacity-100" /></div>
+    <Link to={to} className="card card-lift sheen group relative flex min-h-[8.5rem] flex-col justify-between overflow-hidden p-4" style={{ animationDelay: `${delay + 80}ms` }}>
+      <span aria-hidden="true" className={`pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-current opacity-[.09] blur-2xl transition duration-500 group-hover:scale-150 group-hover:opacity-20 ${tone}`} />
+      <div className="flex items-start justify-between gap-2"><Icon size={18} strokeWidth={1.7} className={`stat-icon ${tone}`} /><ArrowUpRight size={15} className="text-muted opacity-0 transition group-hover:opacity-100" /></div>
       <div><p className="text-[34px] font-extrabold leading-none tracking-tight text-ink"><CountUp value={value} duration={900} /></p><p className="mt-2 text-xs font-medium leading-snug text-muted">{label}</p></div>
     </Link>
   );
@@ -42,7 +42,7 @@ export function Dashboard() {
     <div className="stagger space-y-4">
       {/* Sambutan */}
       <section className="card relative overflow-hidden !rounded-3xl p-5 md:p-7">
-        <div aria-hidden="true" className="photo opacity-[.16]" style={{ backgroundImage: "url('/bg-tugu.jpg')", backgroundPosition: 'center 62%', WebkitMaskImage: 'linear-gradient(90deg, transparent 30%, #000)', maskImage: 'linear-gradient(90deg, transparent 30%, #000)' }} />
+        <div aria-hidden="true" className="photo kenburns opacity-[.16]" style={{ backgroundImage: "url('/bg-tugu.jpg')", backgroundPosition: 'center 62%', WebkitMaskImage: 'linear-gradient(90deg, transparent 30%, #000)', maskImage: 'linear-gradient(90deg, transparent 30%, #000)' }} />
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div className="min-w-0">
             <p className="eyebrow">{new Date().toLocaleDateString('id-ID', { timeZone: WIB, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
@@ -50,16 +50,19 @@ export function Dashboard() {
             <p className="page-sub">Ringkasan data organisasi kemasyarakatan dan kelengkapan dokumennya.</p>
             <p className="mt-3 text-xs text-muted">Data terakhir diperbarui: {fmtDate(d.last_update)}</p>
           </div>
+          <div className="flex flex-col items-start gap-3 md:items-end">
+          <LiveClock />
           <div className="flex flex-wrap gap-2">
             {can('manage_ormas') && <Link to="/admin/ormas?tambah=1" className="btn-p"><Plus size={16} /> Tambah Ormas</Link>}
             <Link to="/admin/pendaftaran" className="btn-o"><UserPlus size={16} /> Tindak lanjuti</Link>
             {can('export') && <Link to="/admin/ekspor" className="btn-o"><Download size={16} /> Ekspor</Link>}
           </div>
+          </div>
         </div>
       </section>
 
       {/* Statistik: dua angka utama + status yang perlu perhatian */}
-      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+      <div className="stagger stagger-pop grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <Stat delay={0} label="Ormas Terdaftar" value={s.terdaftar} icon={Building2} to="/admin/ormas" />
         <Stat delay={40} label="Ormas Aktif" value={s.aktif} icon={BadgeCheck} to="/admin/ormas" tone="text-ok" />
         <Stat delay={80} label="Pendaftaran Baru (Tindak Lanjuti)" value={s.pendaftaran_baru} icon={UserPlus} to="/admin/pendaftaran" tone={s.pendaftaran_baru ? 'text-warn' : 'text-gold'} />
@@ -68,10 +71,16 @@ export function Dashboard() {
         <Stat delay={200} label="Dokumen Sudah Kedaluwarsa" value={exp.sudah} icon={CalendarX2} to="/admin/kedaluwarsa" tone="text-bad" />
         <Stat delay={240} label="Dokumen Segera Berakhir (90 hari)" value={exp.segera} icon={CalendarClock} to="/admin/kedaluwarsa" tone="text-warn" />
         <Stat delay={280} label="Kategori yang memiliki ormas" value={d.by_kategori.length} icon={Building2} to="/admin/ormas" />
+        <Stat delay={320} label="Sudah memiliki Legal Standing" value={d.legal?.ya ?? 0} icon={ShieldCheck} to="/admin/ormas?legal_status=ya" tone="text-ok" />
+        <Stat delay={360} label="Belum memiliki Legal Standing" value={(d.legal?.tidak ?? 0) + (d.legal?.belum ?? 0)} icon={ShieldQuestion} to="/admin/ormas?legal_status=belum" tone={(d.legal?.tidak ?? 0) + (d.legal?.belum ?? 0) ? 'text-warn' : 'text-gold'} />
+        <Stat delay={400} label="Laporan sudah mengirim" value={d.laporan?.sudah_mengirim ?? d.laporan?.dikirim ?? 0} icon={ClipboardList} to="/admin/laporan?status=dikirim" tone="text-ok" />
+        <Stat delay={440} label="Laporan belum mengirim" value={d.laporan?.belum_mengirim ?? ((d.laporan?.belum ?? 0) + (d.laporan?.draft ?? 0))} icon={FileWarning} to="/admin/laporan?status=belum" tone={(d.laporan?.belum_mengirim ?? 0) ? 'text-warn' : 'text-gold'} />
+        <Stat delay={480} label="Menunggu verifikasi" value={d.laporan?.menunggu_verifikasi ?? d.laporan?.dikirim ?? 0} icon={ClipboardList} to="/admin/laporan?status=menunggu_verifikasi" tone="text-info" />
+        <Stat delay={520} label="Dikembalikan / selesai" value={(d.laporan?.dikembalikan ?? d.laporan?.revisi ?? 0) + (d.laporan?.selesai ?? 0)} icon={ClipboardList} to="/admin/laporan?status=dikembalikan" tone="text-warn" />
       </div>
 
       {/* Visualisasi */}
-      <div className="grid gap-4 xl:grid-cols-5">
+      <div className="stagger grid gap-4 xl:grid-cols-5">
         <Panel title="Ormas per kategori" className="xl:col-span-3">
           {d.by_kategori.length ? (
             <ResponsiveContainer width="100%" height={Math.max(220, d.by_kategori.length * 36)}>
@@ -99,7 +108,7 @@ export function Dashboard() {
       </div>
 
       {/* Aktivitas */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="stagger grid gap-4 lg:grid-cols-3">
         <Panel title="Ormas terbaru" action={<More to="/admin/ormas" />}>
           {d.terbaru.length ? (
             <ol className="relative space-y-4 before:absolute before:bottom-2 before:left-[4px] before:top-2 before:w-px before:bg-gold/25">
@@ -127,6 +136,18 @@ export function Dashboard() {
                 <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>{i.kode_ormas} · {i.jenis} · s/d {tglIndo(i.berlaku_sd)}</span><span className={`chip ${i.hari < 0 ? 'text-bad' : 'text-warn'}`}>{i.hari < 0 ? `lewat ${-i.hari} hari` : i.hari === 0 ? 'berakhir hari ini' : `${i.hari} hari lagi`}</span></div>
               </li>))}</ul>
           ) : <Empty text="Tidak ada dokumen yang kedaluwarsa atau segera berakhir." />}
+        </Panel>
+        <Panel title="Legal Standing perlu perhatian" action={<More to="/admin/ormas?legal_status=belum" />}>
+          {d.legal?.items?.length ? (
+            <ul className="divide-y divide-line">{d.legal.items.map((r: any) => (
+              <li key={r.id} className="py-2.5 first:pt-0"><Link to={`/admin/ormas?detail=${r.id}`} className="block text-sm font-semibold text-ink hover:text-link">{r.nama_ormas}</Link><div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span className="mono">{r.kode_ormas}</span><LegalBadge status={r.legal_status} /></div></li>
+            ))}</ul>
+          ) : <Empty text="Semua ormas sudah memiliki Legal Standing." />}
+          <p className="mt-3 border-t border-line pt-2 text-xs text-muted">Sudah: <b className="text-ok">{d.legal?.ya ?? 0}</b> · Tidak memiliki: <b className="text-warn">{d.legal?.tidak ?? 0}</b> · Belum dijawab: <b className="text-warn">{d.legal?.belum ?? 0}</b></p>
+        </Panel>
+        <Panel title={`Laporan Kegiatan Tahunan ${d.laporan?.tahun ?? ''}`} action={<More to="/admin/laporan" />}>
+          <div className="grid grid-cols-2 gap-2 text-xs">{[['Sudah mengirim', d.laporan?.sudah_mengirim ?? d.laporan?.dikirim ?? 0], ['Belum mengirim', d.laporan?.belum_mengirim ?? 0], ['Belum lengkap', d.laporan?.belum_lengkap ?? 0], ['Menunggu verifikasi', d.laporan?.menunggu_verifikasi ?? d.laporan?.dikirim ?? 0], ['Dikembalikan', d.laporan?.dikembalikan ?? d.laporan?.revisi ?? 0], ['Selesai', d.laporan?.selesai ?? 0]].map(([l, n]) => <div key={l} className="panel"><p className="text-muted">{l}</p><p className="mt-1 text-xl font-extrabold text-ink">{n}</p></div>)}</div>
+          <p className="mt-3 text-xs text-muted">Admin dapat membaca arsip per tahun dan meminta revisi pada menu Laporan Tahunan.</p>
         </Panel>
       </div>
     </div>

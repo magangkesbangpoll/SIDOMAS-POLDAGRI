@@ -18,7 +18,10 @@
     "set-email": "node server/tools.js set-email",
     "backup-now": "node server/tools.js backup-now",
     "rapikan-drive": "node server/tools.js rapikan-drive",
-    "organize-drive": "node server/tools.js rapikan-drive"
+    "organize-drive": "node server/tools.js rapikan-drive",
+    "bersihkan-sisa-drive": "node server/tools.js bersihkan-sisa-drive",
+    "laporan-drive": "node server/tools.js laporan-drive",
+    "bersihkan-folder-yatim": "node server/tools.js bersihkan-folder-yatim"
   },
   "engines": {
     "node": ">=18"

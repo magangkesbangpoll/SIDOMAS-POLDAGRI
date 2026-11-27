@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Building2, FileText, Lock, Menu, Search, X } from 'lucide-react';
+import { ArrowRight, Building2, FileText, Menu, Search, X } from 'lucide-react';
 import { CountUp, Reveal } from '../fx';
 import { useMeta } from './Public';
 
-const LINKS: [string, string][] = [['/', 'Beranda'], ['/katalog', 'Katalog Ormas'], ['/daftar', 'Daftar Ormas Baru'], ['/tentang', 'Tentang Sistem'], ['/ormas-login', 'Login Ormas']];
+const LINKS: [string, string][] = [['/', 'Beranda'], ['/katalog', 'Katalog Ormas'], ['/daftar', 'Daftar Ormas Baru'], ['/tracking', 'Tracking Pendaftaran'], ['/tentang', 'Tentang Sistem'], ['/ormas-login', 'Login Ormas']];
 
 export function PublicLayout() {
   const { data: meta } = useMeta(); const { pathname } = useLocation(); const [open, setOpen] = useState(false);
@@ -38,7 +38,7 @@ export function PublicLayout() {
 
 const STEPS: any[] = [
   [Search, 'Cari ormas', 'Cari berdasarkan nama atau ID Ormas, lalu saring menurut kategori bidang.'],
-  [Lock, 'Masukkan kredensial harian', 'Username dan password berganti setiap hari dan hanya berlaku untuk satu ormas. Hubungi admin untuk mendapatkannya.'],
+  [Building2, 'Buka data ormas', 'Pilih ormas yang dicari, lalu lihat dokumen yang tersedia di katalog.'],
   [FileText, 'Baca dokumen', 'PDF dapat dibaca langsung di browser tanpa harus diunduh.'],
 ];
 
@@ -50,10 +50,10 @@ export function Home() {
     <>
       <section className="px-3 pt-3">
         <div className="cinema mx-auto max-w-6xl rounded-[28px] shadow-2xl shadow-navy/20">
-          <div className="photo -z-20" style={{ backgroundImage: "url('/bg-tugu.jpg')", backgroundPosition: '48% 60%' }} aria-hidden="true" />
+          <div className="photo kenburns -z-20" style={{ backgroundImage: "url('/bg-tugu.jpg')", backgroundPosition: '48% 60%' }} aria-hidden="true" />
           <div className="absolute inset-0 -z-10" aria-hidden="true" style={{ background: 'linear-gradient(96deg, rgb(11 17 32 / .95) 0%, rgb(11 17 32 / .82) 45%, rgb(11 17 32 / .3) 80%, rgb(11 17 32 / .45) 100%)' }} />
           <div className="px-5 pb-8 pt-14 sm:px-10 md:pb-12 md:pt-20">
-            <p className="anim-fade-up text-[11px] font-bold uppercase tracking-[.22em] text-gold-soft">Portal Informasi · Bidang Poldagri</p>
+            <p className="hero-chip anim-fade-up"><span className="h-1.5 w-1.5 rounded-full bg-gold-soft" /> Portal Informasi · Bidang Poldagri</p>
             <h1 className="display anim-fade-up anim-d1 mt-4 max-w-3xl text-[2.35rem] text-white md:text-[3.5rem]">Mengenal dan Terhubung dengan Organisasi Kemasyarakatan Kota Yogyakarta</h1>
             <p className="anim-fade-up anim-d2 mt-5 max-w-xl text-base leading-relaxed text-slate-200 md:text-lg">Jelajahi informasi organisasi kemasyarakatan dalam satu portal informasi yang terintegrasi.</p>
             <form onSubmit={cari} role="search" className="anim-fade-up anim-d3 mt-8 flex max-w-xl flex-col gap-2 rounded-2xl border border-white/20 bg-white/10 p-2 backdrop-blur-xl sm:flex-row">
@@ -65,20 +65,20 @@ export function Home() {
               <Link to="/daftar" className="btn-glass">Daftar Ormas Baru</Link>
               <Link to="/tentang" className="btn-glass">Cara mengakses dokumen</Link>
             </div>
-            <dl className="mt-12 flex flex-wrap gap-x-12 gap-y-5 border-t border-white/15 pt-6">
-              <div><dt className="text-xs text-slate-300">Ormas tampil di katalog</dt><dd className="mt-1 text-4xl font-extrabold text-gold-soft"><CountUp value={meta ? meta.total_public : null} /></dd></div>
-              <div><dt className="text-xs text-slate-300">Kategori bidang aktif</dt><dd className="mt-1 text-4xl font-extrabold text-white"><CountUp value={meta ? cats.length : null} /></dd></div>
+            <dl className="mt-12 grid max-w-xl grid-cols-2 gap-3 border-t border-white/15 pt-6">
+              <div className="hero-stat"><b><CountUp value={meta ? meta.total_public : null} /></b><span>Ormas tampil di katalog</span></div>
+              <div className="hero-stat"><b className="!text-white"><CountUp value={meta ? cats.length : null} /></b><span>Kategori bidang aktif</span></div>
             </dl>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <Reveal className="max-w-xl"><p className="eyebrow">Akses dokumen</p><h2 className="display mt-3 text-3xl md:text-4xl">Tiga langkah mengakses dokumen</h2><p className="mt-3 text-muted">Katalog terbuka untuk umum. Dokumen terbatas dibuka dengan kredensial harian dari admin.</p></Reveal>
+        <Reveal className="max-w-xl"><p className="eyebrow">Akses dokumen</p><h2 className="display mt-3 text-3xl md:text-4xl">Tiga langkah mengakses dokumen</h2><p className="mt-3 text-muted">Katalog terbuka untuk umum. Dokumen ormas dapat dibaca langsung atau diunduh tanpa username/password tambahan.</p></Reveal>
         <ol className="mt-10 grid gap-4 md:grid-cols-3">
           {STEPS.map(([I, t, d], i) => (
             <li key={t}><Reveal delay={i * 0.08} className="h-full">
-              <div className="card card-lift h-full p-6">
+              <div className="pub-card card-lift h-full p-6">
                 <div className="flex items-center justify-between"><span className="font-serif text-4xl text-gold">0{i + 1}</span><I size={21} strokeWidth={1.6} className="text-muted" /></div>
                 <h3 className="mt-8 text-base font-bold">{t}</h3><p className="mt-2 text-sm leading-relaxed text-muted">{d}</p>
               </div>
@@ -90,7 +90,7 @@ export function Home() {
       <section className="px-3">
         <Reveal className="mx-auto max-w-6xl">
           <div className="cinema grid items-center gap-6 rounded-[28px] p-7 sm:p-12 md:grid-cols-[1fr_auto]">
-            <div className="photo -z-20" style={{ backgroundImage: "url('/bg-malioboro.jpg')" }} aria-hidden="true" />
+            <div className="photo kenburns -z-20" style={{ backgroundImage: "url('/bg-malioboro.jpg')" }} aria-hidden="true" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-navy-night/95 via-navy-night/85 to-navy-night/55" aria-hidden="true" />
             <div><h2 className="display text-3xl text-white">Ormas Anda belum ada di katalog?</h2><p className="mt-3 max-w-xl text-slate-200">Ajukan pendaftaran lewat formulir online. Admin akan memverifikasi data Anda sebelum ormas tampil di katalog.</p></div>
             <Link to="/daftar" className="btn-g">Daftar Ormas Baru <ArrowRight size={16} /></Link>
